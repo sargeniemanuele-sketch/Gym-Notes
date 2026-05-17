@@ -72,6 +72,69 @@ function formatRestForDisplay(value) {
   return stringValue;
 }
 
+function getRestDurationSeconds(value) {
+  const numericValue = getNumericInputValue(value);
+
+  if (!numericValue) {
+    return null;
+  }
+
+  const durationSeconds = Number.parseInt(numericValue, 10);
+
+  if (!Number.isFinite(durationSeconds) || durationSeconds <= 0) {
+    return null;
+  }
+
+  return durationSeconds;
+}
+
+function formatTimerTime(milliseconds) {
+  const totalSeconds = Math.max(0, Math.ceil(milliseconds / 1000));
+  const minutes = Math.floor(totalSeconds / 60).toString().padStart(2, "0");
+  const seconds = (totalSeconds % 60).toString().padStart(2, "0");
+
+  return `${minutes}:${seconds}`;
+}
+
+function playTimerBeep() {
+  try {
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+
+    if (!AudioContext) {
+      return;
+    }
+
+    const audioContext = new AudioContext();
+    const oscillator = audioContext.createOscillator();
+    const gain = audioContext.createGain();
+
+    oscillator.type = "sine";
+    oscillator.frequency.setValueAtTime(880, audioContext.currentTime);
+    gain.gain.setValueAtTime(0.0001, audioContext.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.18, audioContext.currentTime + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.0001, audioContext.currentTime + 0.28);
+    oscillator.connect(gain);
+    gain.connect(audioContext.destination);
+    oscillator.start();
+    oscillator.stop(audioContext.currentTime + 0.3);
+    window.setTimeout(() => audioContext.close(), 450);
+  } catch {
+    // Audio feedback is optional and can be blocked by the browser.
+  }
+}
+
+function notifyTimerFinished() {
+  try {
+    if (navigator.vibrate) {
+      navigator.vibrate([300, 150, 300]);
+    }
+  } catch {
+    // Vibration is optional.
+  }
+
+  playTimerBeep();
+}
+
 function isPdfFile(file) {
   return file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
 }
@@ -88,7 +151,9 @@ function App() {
   const [saveWarning, setSaveWarning] = useState("");
   const [pdfError, setPdfError] = useState("");
   const [isPdfVisible, setIsPdfVisible] = useState(true);
+  const [activeTimer, setActiveTimer] = useState(null);
   const saveStatusTimeoutRef = useRef(null);
+  const notifiedTimerRef = useRef(null);
   const pdfInputRef = useRef(null);
   const todayLabel = useMemo(() => getTodayLabel(), []);
   const storageAvailable = useMemo(() => isStorageAvailable(), []);
@@ -101,6 +166,50 @@ function App() {
       setIsPdfVisible(true);
     }
   }, [gymPlan?.pdfId, selectedWorkoutId]);
+
+  useEffect(() => {
+    if (activeTimer?.status !== "running") {
+      return undefined;
+    }
+
+    const intervalId = window.setInterval(() => {
+      setActiveTimer((currentTimer) => {
+        if (!currentTimer || currentTimer.status !== "running") {
+          return currentTimer;
+        }
+
+        const remainingMs = Math.max(0, currentTimer.targetEndAt - Date.now());
+
+        if (remainingMs > 0) {
+          return {
+            ...currentTimer,
+            remainingMs
+          };
+        }
+
+        return {
+          ...currentTimer,
+          remainingMs: 0,
+          status: "finished"
+        };
+      });
+    }, 250);
+
+    return () => window.clearInterval(intervalId);
+  }, [activeTimer?.status]);
+
+  useEffect(() => {
+    if (activeTimer?.status !== "finished") {
+      return;
+    }
+
+    if (notifiedTimerRef.current === activeTimer.exerciseId) {
+      return;
+    }
+
+    notifiedTimerRef.current = activeTimer.exerciseId;
+    notifyTimerFinished();
+  }, [activeTimer?.exerciseId, activeTimer?.status]);
 
   function persistNextPlan(nextPlan) {
     setGymPlan(nextPlan);
@@ -120,6 +229,59 @@ function App() {
     saveStatusTimeoutRef.current = window.setTimeout(() => {
       setSaveStatus("");
     }, 1800);
+  }
+
+  function handleStartRestTimer(exerciseId, durationSeconds) {
+    const durationMs = durationSeconds * 1000;
+    notifiedTimerRef.current = null;
+
+    setActiveTimer({
+      exerciseId,
+      durationSeconds,
+      durationMs,
+      remainingMs: durationMs,
+      status: "running",
+      targetEndAt: Date.now() + durationMs
+    });
+  }
+
+  function handlePauseRestTimer(exerciseId) {
+    setActiveTimer((currentTimer) => {
+      if (!currentTimer || currentTimer.exerciseId !== exerciseId || currentTimer.status !== "running") {
+        return currentTimer;
+      }
+
+      return {
+        ...currentTimer,
+        remainingMs: Math.max(0, currentTimer.targetEndAt - Date.now()),
+        status: "paused",
+        targetEndAt: null
+      };
+    });
+  }
+
+  function handleResumeRestTimer(exerciseId) {
+    setActiveTimer((currentTimer) => {
+      if (!currentTimer || currentTimer.exerciseId !== exerciseId || currentTimer.status !== "paused") {
+        return currentTimer;
+      }
+
+      return {
+        ...currentTimer,
+        status: "running",
+        targetEndAt: Date.now() + currentTimer.remainingMs
+      };
+    });
+  }
+
+  function handleResetRestTimer(exerciseId) {
+    setActiveTimer((currentTimer) => {
+      if (!currentTimer || currentTimer.exerciseId !== exerciseId) {
+        return currentTimer;
+      }
+
+      return null;
+    });
   }
 
   function handleCreatePlan(event) {
@@ -550,9 +712,14 @@ function App() {
               <div className="exercise-list">
                 {selectedWorkoutExercises.map((exercise) => (
                   <ExerciseCard
+                    activeTimer={activeTimer}
                     exercise={exercise}
                     key={exercise.id}
                     onDelete={handleDeleteExercise}
+                    onPauseTimer={handlePauseRestTimer}
+                    onResetTimer={handleResetRestTimer}
+                    onResumeTimer={handleResumeRestTimer}
+                    onStartTimer={handleStartRestTimer}
                     onUpdate={handleUpdateExercise}
                   />
                 ))}
@@ -857,7 +1024,7 @@ function ExerciseForm({ draft, error, onCancel, onChange, onSubmit }) {
   );
 }
 
-function ExerciseCard({ exercise, onDelete, onUpdate }) {
+function ExerciseCard({ activeTimer, exercise, onDelete, onPauseTimer, onResetTimer, onResumeTimer, onStartTimer, onUpdate }) {
   const [isEditing, setIsEditing] = useState(false);
   const exerciseName = exercise.name?.trim() || "Esercizio senza nome";
   const setsValue = exercise.sets?.trim();
@@ -868,7 +1035,9 @@ function ExerciseCard({ exercise, onDelete, onUpdate }) {
       : "Serie e ripetizioni non impostate";
   const weightText = formatWeightForDisplay(exercise.weight);
   const restText = formatRestForDisplay(exercise.rest);
+  const restDurationSeconds = getRestDurationSeconds(exercise.rest);
   const notesText = exercise.notes?.trim() || "Nessuna nota";
+  const exerciseTimer = activeTimer?.exerciseId === exercise.id ? activeTimer : null;
 
   if (!isEditing) {
     return (
@@ -899,6 +1068,15 @@ function ExerciseCard({ exercise, onDelete, onUpdate }) {
             <p>{notesText}</p>
           </div>
         </div>
+
+        <RestTimer
+          durationSeconds={restDurationSeconds}
+          onPause={() => onPauseTimer(exercise.id)}
+          onReset={() => onResetTimer(exercise.id)}
+          onResume={() => onResumeTimer(exercise.id)}
+          onStart={() => onStartTimer(exercise.id, restDurationSeconds)}
+          timer={exerciseTimer}
+        />
       </article>
     );
   }
@@ -997,6 +1175,60 @@ function ExerciseCard({ exercise, onDelete, onUpdate }) {
         </button>
       </div>
     </article>
+  );
+}
+
+function RestTimer({ durationSeconds, onPause, onReset, onResume, onStart, timer }) {
+  const hasDuration = Number.isFinite(durationSeconds) && durationSeconds > 0;
+  const isRunning = timer?.status === "running";
+  const isPaused = timer?.status === "paused";
+  const isFinished = timer?.status === "finished";
+  const remainingMs = timer?.remainingMs ?? (hasDuration ? durationSeconds * 1000 : 0);
+
+  if (!hasDuration) {
+    return (
+      <div className="rest-timer">
+        <button className="rest-timer-start" type="button" disabled>
+          Recupero non impostato
+        </button>
+      </div>
+    );
+  }
+
+  if (!timer) {
+    return (
+      <div className="rest-timer">
+        <button className="rest-timer-start" type="button" onClick={onStart}>
+          ▶ Timer {durationSeconds} sec
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="rest-timer rest-timer-active">
+      <p className="rest-timer-time" aria-live="polite">
+        {formatTimerTime(remainingMs)}
+      </p>
+
+      {isFinished && <p className="rest-timer-finished">Recupero finito</p>}
+
+      <div className="rest-timer-actions">
+        {isRunning && (
+          <button type="button" onClick={onPause}>
+            Pausa
+          </button>
+        )}
+        {isPaused && (
+          <button type="button" onClick={onResume}>
+            Riprendi
+          </button>
+        )}
+        <button className="ghost-button" type="button" onClick={onReset}>
+          Reset
+        </button>
+      </div>
+    </div>
   );
 }
 

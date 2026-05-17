@@ -36,6 +36,10 @@ button {
   -webkit-tap-highlight-color: transparent;
 }
 
+button:disabled {
+  cursor: not-allowed;
+}
+
 button:focus-visible,
 input:focus-visible,
 textarea:focus-visible,
@@ -177,6 +181,8 @@ h3 {
 .workout-card-actions button,
 .pdf-actions button,
 .pdf-hide-button,
+.rest-timer-actions button,
+.rest-timer-start,
 .danger-button {
   min-height: 56px;
   border: 0;
@@ -561,6 +567,55 @@ h3 {
   font-size: 1rem;
   line-height: 1.5;
   white-space: pre-wrap;
+}
+
+.rest-timer {
+  display: grid;
+  gap: 12px;
+}
+
+.rest-timer-start {
+  width: 100%;
+  background: #111827;
+}
+
+.rest-timer-start:disabled {
+  background: #e2e8f0;
+  color: #64748b;
+}
+
+.rest-timer-active {
+  border-top: 1px solid #e2e8f0;
+  padding-top: 14px;
+}
+
+.rest-timer-time {
+  margin: 0;
+  color: #111827;
+  font-size: 1.6rem;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.rest-timer-finished {
+  margin: -4px 0 0;
+  color: #166534;
+  font-size: 0.95rem;
+  font-weight: 900;
+}
+
+.rest-timer-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.rest-timer-actions .ghost-button {
+  margin-top: 0;
+}
+
+.rest-timer-actions button:only-child {
+  grid-column: 1 / -1;
 }
 
 .exercise-edit-actions {
