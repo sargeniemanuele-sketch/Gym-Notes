@@ -175,6 +175,7 @@ h3 {
 .secondary-action,
 .form-actions button,
 .workout-card-actions button,
+.pdf-actions button,
 .danger-button {
   min-height: 56px;
   border: 0;
@@ -378,6 +379,63 @@ h3 {
   line-height: 1.5;
 }
 
+.pdf-home-card,
+.pdf-reference-card {
+  display: grid;
+  gap: 16px;
+  margin-top: 18px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 18px;
+  background: #ffffff;
+  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.06);
+}
+
+.pdf-home-card p {
+  margin: 0;
+  color: #334155;
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+.pdf-actions {
+  display: grid;
+  gap: 10px;
+}
+
+.pdf-actions .danger-button {
+  margin-top: 0;
+}
+
+.pdf-viewer {
+  width: 100%;
+  overflow-x: auto;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 10px;
+  background: #f8fafc;
+}
+
+.pdf-viewer-message {
+  margin: 0;
+  color: #475569;
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.pdf-canvas {
+  display: block;
+  max-width: 100%;
+  height: auto !important;
+  margin: 0 auto;
+  background: #ffffff;
+}
+
+.pdf-canvas-hidden {
+  display: none;
+}
+
 .exercise-card {
   margin-top: 0;
 }
@@ -538,6 +596,10 @@ h3 {
   }
 
   .form-actions {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .pdf-actions {
     grid-template-columns: 1fr 1fr;
   }
 

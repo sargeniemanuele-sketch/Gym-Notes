@@ -1,5 +1,10 @@
-import React, { useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import * as pdfjsLib from "pdfjs-dist";
+import pdfWorkerUrl from "pdfjs-dist/build/pdf.worker.mjs?url";
+import { deletePdfFile, getPdfFile, savePdfFile } from "./pdfStorage.js";
 import { clearGymData, createId, isStorageAvailable, loadGymData, saveGymData } from "./storage.js";
+
+pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 
 const todayFormatter = new Intl.DateTimeFormat("it-IT");
 const emptyExerciseDraft = {
@@ -50,6 +55,10 @@ function formatWeightForDisplay(value) {
   return stringValue;
 }
 
+function isPdfFile(file) {
+  return file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
+}
+
 function App() {
   const [gymPlan, setGymPlan] = useState(() => loadGymData());
   const [selectedWorkoutId, setSelectedWorkoutId] = useState(null);
@@ -60,7 +69,10 @@ function App() {
   const [exerciseError, setExerciseError] = useState("");
   const [saveStatus, setSaveStatus] = useState("");
   const [saveWarning, setSaveWarning] = useState("");
+  const [pdfError, setPdfError] = useState("");
+  const [isPdfVisible, setIsPdfVisible] = useState(false);
   const saveStatusTimeoutRef = useRef(null);
+  const pdfInputRef = useRef(null);
   const todayLabel = useMemo(() => getTodayLabel(), []);
   const storageAvailable = useMemo(() => isStorageAvailable(), []);
 
@@ -126,6 +138,7 @@ function App() {
       name: trimmedName,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
+      pdfPage: null,
       exercises: []
     };
 
@@ -198,11 +211,21 @@ function App() {
     showSavedStatus("Allenamento eliminato");
   }
 
-  function handleResetData() {
+  async function handleResetData() {
     const confirmed = window.confirm("Vuoi cancellare tutti i dati salvati su questo dispositivo?");
 
     if (!confirmed) {
       return;
+    }
+
+    let resetWarning = "";
+
+    if (gymPlan?.pdfId) {
+      try {
+        await deletePdfFile(gymPlan.pdfId);
+      } catch {
+        resetWarning = "I dati sono stati cancellati, ma non è stato possibile rimuovere il PDF da IndexedDB.";
+      }
     }
 
     clearGymData();
@@ -213,8 +236,108 @@ function App() {
     setIsExerciseFormOpen(false);
     setExerciseDraft(emptyExerciseDraft);
     setExerciseError("");
+    setPdfError("");
+    setIsPdfVisible(false);
     showSavedStatus("");
-    setSaveWarning("");
+    setSaveWarning(resetWarning);
+  }
+
+  async function handlePdfFileChange(event) {
+    if (!gymPlan) {
+      return;
+    }
+
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    setPdfError("");
+
+    if (!file) {
+      return;
+    }
+
+    if (!isPdfFile(file)) {
+      setPdfError("Seleziona un file PDF.");
+      return;
+    }
+
+    const pdfId = createId();
+    const pdfUpdatedAt = new Date().toISOString();
+
+    try {
+      await savePdfFile(pdfId, file);
+
+      if (gymPlan.pdfId) {
+        try {
+          await deletePdfFile(gymPlan.pdfId);
+        } catch {
+          // The plan will point to the new PDF, so an old orphan can be ignored.
+        }
+      }
+
+      const nextPlan = {
+        ...gymPlan,
+        pdfId,
+        pdfName: file.name,
+        pdfSize: file.size,
+        pdfUpdatedAt,
+        updatedAt: pdfUpdatedAt
+      };
+
+      persistNextPlan(nextPlan);
+      showSavedStatus("PDF salvato sul dispositivo");
+    } catch {
+      setPdfError("Non è stato possibile salvare il PDF su questo dispositivo.");
+    }
+  }
+
+  async function handleRemovePdf() {
+    if (!gymPlan?.pdfId) {
+      return;
+    }
+
+    const confirmed = window.confirm("Vuoi rimuovere il PDF salvato da questo dispositivo?");
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      await deletePdfFile(gymPlan.pdfId);
+    } catch {
+      setPdfError("Non è stato possibile rimuovere il PDF da IndexedDB.");
+      return;
+    }
+
+    const { pdfId, pdfName, pdfSize, pdfUpdatedAt, ...planWithoutPdf } = gymPlan;
+    const nextPlan = {
+      ...planWithoutPdf,
+      updatedAt: new Date().toISOString()
+    };
+
+    persistNextPlan(nextPlan);
+    setIsPdfVisible(false);
+    showSavedStatus("PDF rimosso");
+  }
+
+  function handleWorkoutPdfPageChange(workoutId, value) {
+    if (!gymPlan) {
+      return;
+    }
+
+    const parsedPage = Number.parseInt(value, 10);
+    const pdfPage = Number.isFinite(parsedPage) && parsedPage >= 1 ? parsedPage : null;
+    const now = new Date().toISOString();
+    const nextPlan = updateWorkoutInPlan(gymPlan, workoutId, (workout) => ({
+      ...workout,
+      pdfPage,
+      updatedAt: now
+    }));
+
+    persistNextPlan({
+      ...nextPlan,
+      updatedAt: now
+    });
+    showSavedStatus();
   }
 
   function handleExerciseDraftChange(field, value) {
@@ -372,6 +495,43 @@ function App() {
             />
           </header>
 
+          {gymPlan.pdfId && (
+            <section className="content-section" aria-labelledby="pdf-reference-title">
+              <div className="section-title-row">
+                <h2 id="pdf-reference-title">Riferimento PDF</h2>
+                {saveStatus && <span className="save-status">{saveStatus}</span>}
+              </div>
+
+              <div className="pdf-reference-card">
+                <div className="field-stack">
+                  <label htmlFor="workout-pdf-page">Pagina PDF</label>
+                  <input
+                    id="workout-pdf-page"
+                    type="number"
+                    value={selectedWorkout.pdfPage ?? 1}
+                    onChange={(event) => handleWorkoutPdfPageChange(selectedWorkout.id, event.target.value)}
+                    min="1"
+                    inputMode="numeric"
+                    autoComplete="off"
+                  />
+                </div>
+
+                <div className="pdf-actions">
+                  <button type="button" onClick={() => setIsPdfVisible(true)}>
+                    Mostra PDF
+                  </button>
+                  <button className="ghost-button" type="button" onClick={() => setIsPdfVisible(false)}>
+                    Nascondi PDF
+                  </button>
+                </div>
+
+                {isPdfVisible && (
+                  <PdfPageViewer pdfId={gymPlan.pdfId} pageNumber={selectedWorkout.pdfPage ?? 1} />
+                )}
+              </div>
+            </section>
+          )}
+
           <section className="content-section" aria-labelledby="exercises-title">
             <div className="section-title-row">
               <h2 id="exercises-title">Esercizi</h2>
@@ -429,6 +589,42 @@ function App() {
             autoComplete="off"
           />
         </header>
+
+        <section className="content-section" aria-labelledby="original-pdf-title">
+          <div className="section-title-row">
+            <h2 id="original-pdf-title">Scheda originale PDF</h2>
+            {saveStatus && <span className="save-status">{saveStatus}</span>}
+          </div>
+
+          <div className="pdf-home-card">
+            {gymPlan.pdfId ? (
+              <p>PDF caricato: {gymPlan.pdfName}</p>
+            ) : (
+              <p>Nessun PDF caricato</p>
+            )}
+
+            <input
+              className="sr-only"
+              ref={pdfInputRef}
+              type="file"
+              accept="application/pdf"
+              onChange={handlePdfFileChange}
+            />
+
+            <div className="pdf-actions">
+              <button type="button" onClick={() => pdfInputRef.current?.click()}>
+                {gymPlan.pdfId ? "Sostituisci PDF" : "Carica PDF"}
+              </button>
+              {gymPlan.pdfId && (
+                <button className="danger-button" type="button" onClick={handleRemovePdf}>
+                  Rimuovi PDF
+                </button>
+              )}
+            </div>
+
+            {pdfError && <p className="field-error">{pdfError}</p>}
+          </div>
+        </section>
 
         <section className="content-section" aria-labelledby="workouts-title">
           <div className="section-title-row">
@@ -754,6 +950,112 @@ function ExerciseCard({ exercise, onDelete, onUpdate }) {
         </button>
       </div>
     </article>
+  );
+}
+
+function PdfPageViewer({ pageNumber, pdfId }) {
+  const canvasRef = useRef(null);
+  const containerRef = useRef(null);
+  const [viewerStatus, setViewerStatus] = useState("loading");
+  const [viewerError, setViewerError] = useState("");
+
+  useEffect(() => {
+    let isCancelled = false;
+    let loadingTask = null;
+    let renderTask = null;
+
+    async function renderPdfPage() {
+      setViewerStatus("loading");
+      setViewerError("");
+
+      try {
+        const savedPdf = await getPdfFile(pdfId);
+
+        if (!savedPdf?.file) {
+          throw new Error("missing-pdf");
+        }
+
+        const arrayBuffer = await savedPdf.file.arrayBuffer();
+        loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
+        const pdfDocument = await loadingTask.promise;
+
+        if (pageNumber < 1 || pageNumber > pdfDocument.numPages) {
+          if (!isCancelled) {
+            setViewerStatus("error");
+            setViewerError("Pagina non disponibile per questo PDF.");
+          }
+          await pdfDocument.destroy();
+          return;
+        }
+
+        const page = await pdfDocument.getPage(pageNumber);
+        const baseViewport = page.getViewport({ scale: 1 });
+        const containerWidth = containerRef.current?.clientWidth ?? baseViewport.width;
+        const scale = Math.max(containerWidth / baseViewport.width, 0.1);
+        const viewport = page.getViewport({ scale });
+        const canvas = canvasRef.current;
+
+        if (!canvas || isCancelled) {
+          await pdfDocument.destroy();
+          return;
+        }
+
+        const outputScale = window.devicePixelRatio || 1;
+        canvas.width = Math.floor(viewport.width * outputScale);
+        canvas.height = Math.floor(viewport.height * outputScale);
+        canvas.style.width = `${Math.floor(viewport.width)}px`;
+        canvas.style.height = `${Math.floor(viewport.height)}px`;
+
+        const context = canvas.getContext("2d", { alpha: false });
+
+        if (!context) {
+          throw new Error("missing-canvas-context");
+        }
+
+        const transform = outputScale !== 1 ? [outputScale, 0, 0, outputScale, 0, 0] : null;
+        renderTask = page.render({
+          canvasContext: context,
+          transform,
+          viewport
+        });
+
+        await renderTask.promise;
+        await pdfDocument.destroy();
+
+        if (!isCancelled) {
+          setViewerStatus("ready");
+        }
+      } catch (error) {
+        if (isCancelled || error?.name === "RenderingCancelledException") {
+          return;
+        }
+
+        setViewerStatus("error");
+        setViewerError("Il PDF non può essere letto.");
+      }
+    }
+
+    renderPdfPage();
+
+    return () => {
+      isCancelled = true;
+
+      if (renderTask) {
+        renderTask.cancel();
+      }
+
+      if (loadingTask) {
+        loadingTask.destroy();
+      }
+    };
+  }, [pageNumber, pdfId]);
+
+  return (
+    <div className="pdf-viewer" ref={containerRef}>
+      {viewerStatus === "loading" && <p className="pdf-viewer-message">Caricamento PDF...</p>}
+      {viewerStatus === "error" && <p className="field-error">{viewerError}</p>}
+      <canvas className={viewerStatus === "ready" ? "pdf-canvas" : "pdf-canvas pdf-canvas-hidden"} ref={canvasRef} />
+    </div>
   );
 }
 

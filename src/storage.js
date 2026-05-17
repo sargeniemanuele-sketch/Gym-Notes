@@ -88,6 +88,10 @@ function normalizeGymData(data) {
     name: data.name,
     createdAt: planCreatedAt,
     updatedAt: typeof data.updatedAt === "string" ? data.updatedAt : planCreatedAt,
+    pdfId: typeof data.pdfId === "string" ? data.pdfId : undefined,
+    pdfName: typeof data.pdfName === "string" ? data.pdfName : undefined,
+    pdfSize: typeof data.pdfSize === "number" ? data.pdfSize : undefined,
+    pdfUpdatedAt: typeof data.pdfUpdatedAt === "string" ? data.pdfUpdatedAt : undefined,
     workouts: data.workouts.filter(isObject).map(normalizeWorkout)
   };
 }
@@ -104,6 +108,7 @@ function normalizeWorkout(workout) {
     name: typeof workout.name === "string" ? workout.name : "",
     createdAt: workoutCreatedAt,
     updatedAt: typeof workout.updatedAt === "string" ? workout.updatedAt : workoutCreatedAt,
+    pdfPage: typeof workout.pdfPage === "number" && Number.isFinite(workout.pdfPage) ? workout.pdfPage : null,
     exercises: Array.isArray(workout.exercises) ? workout.exercises.filter(isObject).map(normalizeExercise) : []
   };
 }
