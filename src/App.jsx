@@ -14,6 +14,42 @@ function getTodayLabel() {
   return todayFormatter.format(new Date());
 }
 
+function getNumericInputValue(value) {
+  const stringValue = typeof value === "string" ? value.trim() : "";
+
+  if (!stringValue) {
+    return "";
+  }
+
+  const numberMatch = stringValue.match(/^(\d+(?:[.,]\d+)?)(?:\s*kg)?$/i);
+
+  if (!numberMatch) {
+    return "";
+  }
+
+  return numberMatch[1].replace(",", ".");
+}
+
+function normalizeNumericInputValue(value) {
+  return getNumericInputValue(value);
+}
+
+function formatWeightForDisplay(value) {
+  const stringValue = typeof value === "string" ? value.trim() : "";
+
+  if (!stringValue) {
+    return "Carico non impostato";
+  }
+
+  const numericValue = getNumericInputValue(stringValue);
+
+  if (numericValue) {
+    return `${numericValue} kg`;
+  }
+
+  return stringValue;
+}
+
 function App() {
   const [gymPlan, setGymPlan] = useState(() => loadGymData());
   const [selectedWorkoutId, setSelectedWorkoutId] = useState(null);
@@ -210,9 +246,9 @@ function App() {
     const nextExercise = {
       id: createId(),
       name: trimmedName,
-      sets: exerciseDraft.sets,
-      reps: exerciseDraft.reps,
-      weight: exerciseDraft.weight,
+      sets: normalizeNumericInputValue(exerciseDraft.sets),
+      reps: normalizeNumericInputValue(exerciseDraft.reps),
+      weight: normalizeNumericInputValue(exerciseDraft.weight),
       notes: exerciseDraft.notes,
       createdAt: now,
       updatedAt: now
@@ -537,10 +573,12 @@ function ExerciseForm({ draft, error, onCancel, onChange, onSubmit }) {
           <label htmlFor="exercise-sets">Serie</label>
           <input
             id="exercise-sets"
-            type="text"
-            value={draft.sets}
-            onChange={(event) => onChange("sets", event.target.value)}
-            placeholder="Es. 4"
+            type="number"
+            value={getNumericInputValue(draft.sets)}
+            onChange={(event) => onChange("sets", normalizeNumericInputValue(event.target.value))}
+            placeholder="4"
+            min="0"
+            inputMode="numeric"
             autoComplete="off"
           />
         </div>
@@ -549,10 +587,12 @@ function ExerciseForm({ draft, error, onCancel, onChange, onSubmit }) {
           <label htmlFor="exercise-reps">Ripetizioni</label>
           <input
             id="exercise-reps"
-            type="text"
-            value={draft.reps}
-            onChange={(event) => onChange("reps", event.target.value)}
-            placeholder="Es. 10/8"
+            type="number"
+            value={getNumericInputValue(draft.reps)}
+            onChange={(event) => onChange("reps", normalizeNumericInputValue(event.target.value))}
+            placeholder="10"
+            min="0"
+            inputMode="numeric"
             autoComplete="off"
           />
         </div>
@@ -560,14 +600,20 @@ function ExerciseForm({ draft, error, onCancel, onChange, onSubmit }) {
 
       <div className="field-stack">
         <label htmlFor="exercise-weight">Carico</label>
-        <input
-          id="exercise-weight"
-          type="text"
-          value={draft.weight}
-          onChange={(event) => onChange("weight", event.target.value)}
-          placeholder="Es. 70 kg"
-          autoComplete="off"
-        />
+        <div className="weight-input-row">
+          <input
+            id="exercise-weight"
+            type="number"
+            value={getNumericInputValue(draft.weight)}
+            onChange={(event) => onChange("weight", normalizeNumericInputValue(event.target.value))}
+            placeholder="70"
+            min="0"
+            step="0.5"
+            inputMode="decimal"
+            autoComplete="off"
+          />
+          <span aria-hidden="true">kg</span>
+        </div>
       </div>
 
       <div className="field-stack">
@@ -592,6 +638,45 @@ function ExerciseForm({ draft, error, onCancel, onChange, onSubmit }) {
 }
 
 function ExerciseCard({ exercise, onDelete, onUpdate }) {
+  const [isEditing, setIsEditing] = useState(false);
+  const exerciseName = exercise.name?.trim() || "Esercizio senza nome";
+  const setsValue = exercise.sets?.trim();
+  const repsValue = exercise.reps?.trim();
+  const performanceText =
+    setsValue || repsValue
+      ? `${setsValue || "-"} x ${repsValue || "-"}`
+      : "Serie e ripetizioni non impostate";
+  const weightText = formatWeightForDisplay(exercise.weight);
+  const notesText = exercise.notes?.trim() || "Nessuna nota";
+
+  if (!isEditing) {
+    return (
+      <article className="exercise-card exercise-card-compact">
+        <header className="exercise-card-header">
+          <div>
+            <h3>{exerciseName}</h3>
+            <p className="exercise-performance">{performanceText}</p>
+          </div>
+          <button className="compact-edit-button" type="button" onClick={() => setIsEditing(true)}>
+            Modifica
+          </button>
+        </header>
+
+        <div className="exercise-read-grid">
+          <div className="exercise-read-block">
+            <span>Carico</span>
+            <p>{weightText}</p>
+          </div>
+
+          <div className="exercise-read-block">
+            <span>Note</span>
+            <p>{notesText}</p>
+          </div>
+        </div>
+      </article>
+    );
+  }
+
   return (
     <article className="exercise-card">
       <div className="field-stack">
@@ -610,9 +695,11 @@ function ExerciseCard({ exercise, onDelete, onUpdate }) {
           <label htmlFor={`exercise-${exercise.id}-sets`}>Serie</label>
           <input
             id={`exercise-${exercise.id}-sets`}
-            type="text"
-            value={exercise.sets ?? ""}
-            onChange={(event) => onUpdate(exercise.id, "sets", event.target.value)}
+            type="number"
+            value={getNumericInputValue(exercise.sets)}
+            onChange={(event) => onUpdate(exercise.id, "sets", normalizeNumericInputValue(event.target.value))}
+            min="0"
+            inputMode="numeric"
             autoComplete="off"
           />
         </div>
@@ -621,9 +708,11 @@ function ExerciseCard({ exercise, onDelete, onUpdate }) {
           <label htmlFor={`exercise-${exercise.id}-reps`}>Ripetizioni</label>
           <input
             id={`exercise-${exercise.id}-reps`}
-            type="text"
-            value={exercise.reps ?? ""}
-            onChange={(event) => onUpdate(exercise.id, "reps", event.target.value)}
+            type="number"
+            value={getNumericInputValue(exercise.reps)}
+            onChange={(event) => onUpdate(exercise.id, "reps", normalizeNumericInputValue(event.target.value))}
+            min="0"
+            inputMode="numeric"
             autoComplete="off"
           />
         </div>
@@ -631,13 +720,19 @@ function ExerciseCard({ exercise, onDelete, onUpdate }) {
 
       <div className="field-stack">
         <label htmlFor={`exercise-${exercise.id}-weight`}>Carico</label>
-        <input
-          id={`exercise-${exercise.id}-weight`}
-          type="text"
-          value={exercise.weight ?? ""}
-          onChange={(event) => onUpdate(exercise.id, "weight", event.target.value)}
-          autoComplete="off"
-        />
+        <div className="weight-input-row">
+          <input
+            id={`exercise-${exercise.id}-weight`}
+            type="number"
+            value={getNumericInputValue(exercise.weight)}
+            onChange={(event) => onUpdate(exercise.id, "weight", normalizeNumericInputValue(event.target.value))}
+            min="0"
+            step="0.5"
+            inputMode="decimal"
+            autoComplete="off"
+          />
+          <span aria-hidden="true">kg</span>
+        </div>
       </div>
 
       <div className="field-stack">
@@ -650,9 +745,14 @@ function ExerciseCard({ exercise, onDelete, onUpdate }) {
         />
       </div>
 
-      <button className="danger-button" type="button" onClick={() => onDelete(exercise.id)}>
-        Elimina
-      </button>
+      <div className="exercise-edit-actions">
+        <button className="ghost-button" type="button" onClick={() => setIsEditing(false)}>
+          Chiudi modifica
+        </button>
+        <button className="danger-button" type="button" onClick={() => onDelete(exercise.id)}>
+          Elimina esercizio
+        </button>
+      </div>
     </article>
   );
 }

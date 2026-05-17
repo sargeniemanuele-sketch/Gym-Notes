@@ -382,6 +382,79 @@ h3 {
   margin-top: 0;
 }
 
+.exercise-card-compact {
+  gap: 14px;
+  padding: 16px;
+}
+
+.exercise-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.exercise-card-header h3 {
+  color: #111827;
+  font-size: 1.15rem;
+  line-height: 1.25;
+}
+
+.exercise-performance {
+  margin: 6px 0 0;
+  color: #334155;
+  font-size: 1rem;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
+.compact-edit-button {
+  flex: 0 0 auto;
+  min-height: 42px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 0 14px;
+  background: #ffffff;
+  color: #2563eb;
+  font-size: 0.95rem;
+  font-weight: 800;
+}
+
+.exercise-read-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.exercise-read-block {
+  display: grid;
+  gap: 4px;
+}
+
+.exercise-read-block span {
+  color: #64748b;
+  font-size: 0.78rem;
+  font-weight: 900;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.exercise-read-block p {
+  margin: 0;
+  color: #111827;
+  font-size: 1rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+.exercise-edit-actions {
+  display: grid;
+  gap: 10px;
+}
+
+.exercise-edit-actions .danger-button {
+  margin-top: 0;
+}
+
 .field-stack {
   display: grid;
   gap: 8px;
@@ -397,6 +470,19 @@ h3 {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 12px;
+}
+
+.weight-input-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+}
+
+.weight-input-row span {
+  color: #475569;
+  font-size: 1rem;
+  font-weight: 900;
 }
 
 .form-actions {
@@ -452,6 +538,10 @@ h3 {
   }
 
   .form-actions {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .exercise-edit-actions {
     grid-template-columns: 1fr 1fr;
   }
 }

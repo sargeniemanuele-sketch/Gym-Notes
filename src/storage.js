@@ -114,11 +114,31 @@ function normalizeExercise(exercise) {
   return {
     id: typeof exercise.id === "string" ? exercise.id : createId(),
     name: typeof exercise.name === "string" ? exercise.name : "",
-    sets: typeof exercise.sets === "string" ? exercise.sets : "",
-    reps: typeof exercise.reps === "string" ? exercise.reps : "",
-    weight: typeof exercise.weight === "string" ? exercise.weight : "",
+    sets: normalizeSimpleNumberText(exercise.sets),
+    reps: normalizeSimpleNumberText(exercise.reps),
+    weight: normalizeSimpleNumberText(exercise.weight),
     notes: typeof exercise.notes === "string" ? exercise.notes : "",
     createdAt: exerciseCreatedAt,
     updatedAt: typeof exercise.updatedAt === "string" ? exercise.updatedAt : exerciseCreatedAt
   };
+}
+
+function normalizeSimpleNumberText(value) {
+  if (typeof value !== "string") {
+    return "";
+  }
+
+  const trimmedValue = value.trim();
+
+  if (!trimmedValue) {
+    return "";
+  }
+
+  const numberMatch = trimmedValue.match(/^(\d+(?:[.,]\d+)?)(?:\s*kg)?$/i);
+
+  if (!numberMatch) {
+    return trimmedValue;
+  }
+
+  return numberMatch[1].replace(",", ".");
 }
