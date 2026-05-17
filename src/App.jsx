@@ -70,7 +70,7 @@ function App() {
   const [saveStatus, setSaveStatus] = useState("");
   const [saveWarning, setSaveWarning] = useState("");
   const [pdfError, setPdfError] = useState("");
-  const [isPdfVisible, setIsPdfVisible] = useState(false);
+  const [isPdfVisible, setIsPdfVisible] = useState(true);
   const saveStatusTimeoutRef = useRef(null);
   const pdfInputRef = useRef(null);
   const todayLabel = useMemo(() => getTodayLabel(), []);
@@ -78,6 +78,12 @@ function App() {
 
   const selectedWorkout = gymPlan?.workouts.find((workout) => workout.id === selectedWorkoutId);
   const selectedWorkoutExercises = selectedWorkout?.exercises ?? [];
+
+  useEffect(() => {
+    if (selectedWorkoutId && gymPlan?.pdfId) {
+      setIsPdfVisible(true);
+    }
+  }, [gymPlan?.pdfId, selectedWorkoutId]);
 
   function persistNextPlan(nextPlan) {
     setGymPlan(nextPlan);
@@ -324,7 +330,7 @@ function App() {
       return;
     }
 
-    const parsedPage = Number.parseInt(value, 10);
+    const parsedPage = typeof value === "number" ? value : Number.parseInt(value, 10);
     const pdfPage = Number.isFinite(parsedPage) && parsedPage >= 1 ? parsedPage : null;
     const now = new Date().toISOString();
     const nextPlan = updateWorkoutInPlan(gymPlan, workoutId, (workout) => ({
@@ -502,33 +508,15 @@ function App() {
                 {saveStatus && <span className="save-status">{saveStatus}</span>}
               </div>
 
-              <div className="pdf-reference-card">
-                <div className="field-stack">
-                  <label htmlFor="workout-pdf-page">Pagina PDF</label>
-                  <input
-                    id="workout-pdf-page"
-                    type="number"
-                    value={selectedWorkout.pdfPage ?? 1}
-                    onChange={(event) => handleWorkoutPdfPageChange(selectedWorkout.id, event.target.value)}
-                    min="1"
-                    inputMode="numeric"
-                    autoComplete="off"
-                  />
-                </div>
-
-                <div className="pdf-actions">
-                  <button type="button" onClick={() => setIsPdfVisible(true)}>
-                    Mostra PDF
-                  </button>
-                  <button className="ghost-button" type="button" onClick={() => setIsPdfVisible(false)}>
-                    Nascondi PDF
-                  </button>
-                </div>
-
-                {isPdfVisible && (
-                  <PdfPageViewer pdfId={gymPlan.pdfId} pageNumber={selectedWorkout.pdfPage ?? 1} />
-                )}
-              </div>
+              <PdfReferenceSection
+                isVisible={isPdfVisible}
+                onHide={() => setIsPdfVisible(false)}
+                onPageChange={(pageNumber) => handleWorkoutPdfPageChange(selectedWorkout.id, pageNumber)}
+                onShow={() => setIsPdfVisible(true)}
+                pdfId={gymPlan.pdfId}
+                pdfName={gymPlan.pdfName}
+                selectedPage={selectedWorkout.pdfPage}
+              />
             </section>
           )}
 
@@ -953,7 +941,142 @@ function ExerciseCard({ exercise, onDelete, onUpdate }) {
   );
 }
 
-function PdfPageViewer({ pageNumber, pdfId }) {
+function PdfReferenceSection({ isVisible, onHide, onPageChange, onShow, pdfId, pdfName, selectedPage }) {
+  const [pdfData, setPdfData] = useState(null);
+  const [numPages, setNumPages] = useState(null);
+  const [referenceStatus, setReferenceStatus] = useState("loading");
+  const [referenceError, setReferenceError] = useState("");
+  const [pageNotice, setPageNotice] = useState("");
+  const effectivePage = Number.isFinite(selectedPage) && selectedPage >= 1 ? selectedPage : 1;
+  const visiblePage = numPages ? Math.min(effectivePage, numPages) : effectivePage;
+
+  useEffect(() => {
+    let isCancelled = false;
+    let loadingTask = null;
+
+    async function loadPdfReference() {
+      setReferenceStatus("loading");
+      setReferenceError("");
+      setPageNotice("");
+      setPdfData(null);
+      setNumPages(null);
+
+      try {
+        const savedPdf = await getPdfFile(pdfId);
+
+        if (!savedPdf?.file) {
+          throw new Error("missing-pdf");
+        }
+
+        const arrayBuffer = await savedPdf.file.arrayBuffer();
+        loadingTask = pdfjsLib.getDocument({ data: new Uint8Array(arrayBuffer.slice(0)) });
+        const pdfDocument = await loadingTask.promise;
+        const totalPages = pdfDocument.numPages;
+        await pdfDocument.destroy();
+
+        if (!totalPages) {
+          throw new Error("missing-pages");
+        }
+
+        if (!isCancelled) {
+          setPdfData(arrayBuffer);
+          setNumPages(totalPages);
+          setReferenceStatus("ready");
+        }
+      } catch {
+        if (!isCancelled) {
+          setReferenceStatus("error");
+          setReferenceError("Il PDF non può essere caricato.");
+        }
+      }
+    }
+
+    loadPdfReference();
+
+    return () => {
+      isCancelled = true;
+
+      if (loadingTask) {
+        loadingTask.destroy();
+      }
+    };
+  }, [pdfId]);
+
+  useEffect(() => {
+    if (!numPages) {
+      return;
+    }
+
+    if (!Number.isFinite(selectedPage) || selectedPage < 1) {
+      onPageChange(1);
+      return;
+    }
+
+    if (selectedPage > numPages) {
+      setPageNotice("Pagina non disponibile per questo PDF. Mostro la pagina disponibile più vicina.");
+      onPageChange(numPages);
+      return;
+    }
+
+    setPageNotice("");
+  }, [numPages, onPageChange, selectedPage]);
+
+  if (!isVisible) {
+    return (
+      <div className="pdf-reference-card">
+        <p className="pdf-reference-copy">Scheda originale caricata{pdfName ? `: ${pdfName}` : ""}</p>
+        <button className="secondary-action pdf-show-button" type="button" onClick={onShow}>
+          Mostra riferimento PDF
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="pdf-reference-card">
+      <p className="pdf-reference-copy">Scheda originale caricata{pdfName ? `: ${pdfName}` : ""}</p>
+
+      {referenceStatus === "loading" && <p className="pdf-viewer-message">Caricamento PDF...</p>}
+      {referenceStatus === "error" && <p className="field-error">{referenceError}</p>}
+
+      {referenceStatus === "ready" && numPages && (
+        <>
+          <div className="pdf-page-control" aria-label="Seleziona pagina PDF">
+            <span>Pagina</span>
+            <div className="pdf-page-buttons">
+              {Array.from({ length: numPages }, (_, index) => {
+                const pageNumber = index + 1;
+                const isSelected = pageNumber === visiblePage;
+
+                return (
+                  <button
+                    aria-pressed={isSelected}
+                    className={isSelected ? "pdf-page-button pdf-page-button-active" : "pdf-page-button"}
+                    key={pageNumber}
+                    type="button"
+                    onClick={() => onPageChange(pageNumber)}
+                  >
+                    {pageNumber}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {pageNotice && <p className="pdf-page-notice">{pageNotice}</p>}
+
+          <PdfPageViewer pageNumber={visiblePage} pdfData={pdfData} />
+        </>
+      )}
+
+      <button className="ghost-button pdf-hide-button" type="button" onClick={onHide}>
+        Nascondi PDF
+      </button>
+    </div>
+  );
+}
+
+function PdfPageViewer({ pageNumber, pdfData }) {
   const canvasRef = useRef(null);
   const containerRef = useRef(null);
   const [viewerStatus, setViewerStatus] = useState("loading");
@@ -969,14 +1092,11 @@ function PdfPageViewer({ pageNumber, pdfId }) {
       setViewerError("");
 
       try {
-        const savedPdf = await getPdfFile(pdfId);
-
-        if (!savedPdf?.file) {
-          throw new Error("missing-pdf");
+        if (!pdfData) {
+          throw new Error("missing-pdf-data");
         }
 
-        const arrayBuffer = await savedPdf.file.arrayBuffer();
-        loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
+        loadingTask = pdfjsLib.getDocument({ data: new Uint8Array(pdfData.slice(0)) });
         const pdfDocument = await loadingTask.promise;
 
         if (pageNumber < 1 || pageNumber > pdfDocument.numPages) {
@@ -1048,7 +1168,7 @@ function PdfPageViewer({ pageNumber, pdfId }) {
         loadingTask.destroy();
       }
     };
-  }, [pageNumber, pdfId]);
+  }, [pageNumber, pdfData]);
 
   return (
     <div className="pdf-viewer" ref={containerRef}>
