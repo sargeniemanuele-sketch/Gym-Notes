@@ -12,6 +12,7 @@ const emptyExerciseDraft = {
   sets: "",
   reps: "",
   weight: "",
+  rest: "",
   notes: ""
 };
 
@@ -26,7 +27,7 @@ function getNumericInputValue(value) {
     return "";
   }
 
-  const numberMatch = stringValue.match(/^(\d+(?:[.,]\d+)?)(?:\s*kg)?$/i);
+  const numberMatch = stringValue.match(/^(\d+(?:[.,]\d+)?)(?:\s*(?:kg|sec))?$/i);
 
   if (!numberMatch) {
     return "";
@@ -50,6 +51,22 @@ function formatWeightForDisplay(value) {
 
   if (numericValue) {
     return `${numericValue} kg`;
+  }
+
+  return stringValue;
+}
+
+function formatRestForDisplay(value) {
+  const stringValue = typeof value === "string" ? value.trim() : "";
+
+  if (!stringValue) {
+    return "Recupero non impostato";
+  }
+
+  const numericValue = getNumericInputValue(stringValue);
+
+  if (numericValue) {
+    return `${numericValue} sec`;
   }
 
   return stringValue;
@@ -378,6 +395,7 @@ function App() {
       sets: normalizeNumericInputValue(exerciseDraft.sets),
       reps: normalizeNumericInputValue(exerciseDraft.reps),
       weight: normalizeNumericInputValue(exerciseDraft.weight),
+      rest: normalizeNumericInputValue(exerciseDraft.rest),
       notes: exerciseDraft.notes,
       createdAt: now,
       updatedAt: now
@@ -784,7 +802,7 @@ function ExerciseForm({ draft, error, onCancel, onChange, onSubmit }) {
 
       <div className="field-stack">
         <label htmlFor="exercise-weight">Carico</label>
-        <div className="weight-input-row">
+        <div className="unit-input-row">
           <input
             id="exercise-weight"
             type="number"
@@ -797,6 +815,24 @@ function ExerciseForm({ draft, error, onCancel, onChange, onSubmit }) {
             autoComplete="off"
           />
           <span aria-hidden="true">kg</span>
+        </div>
+      </div>
+
+      <div className="field-stack">
+        <label htmlFor="exercise-rest">Recupero</label>
+        <div className="unit-input-row">
+          <input
+            id="exercise-rest"
+            type="number"
+            value={getNumericInputValue(draft.rest)}
+            onChange={(event) => onChange("rest", normalizeNumericInputValue(event.target.value))}
+            placeholder="90"
+            min="0"
+            step="5"
+            inputMode="numeric"
+            autoComplete="off"
+          />
+          <span aria-hidden="true">sec</span>
         </div>
       </div>
 
@@ -831,6 +867,7 @@ function ExerciseCard({ exercise, onDelete, onUpdate }) {
       ? `${setsValue || "-"} x ${repsValue || "-"}`
       : "Serie e ripetizioni non impostate";
   const weightText = formatWeightForDisplay(exercise.weight);
+  const restText = formatRestForDisplay(exercise.rest);
   const notesText = exercise.notes?.trim() || "Nessuna nota";
 
   if (!isEditing) {
@@ -850,6 +887,11 @@ function ExerciseCard({ exercise, onDelete, onUpdate }) {
           <div className="exercise-read-block">
             <span>Carico</span>
             <p>{weightText}</p>
+          </div>
+
+          <div className="exercise-read-block">
+            <span>Recupero</span>
+            <p>{restText}</p>
           </div>
 
           <div className="exercise-read-block">
@@ -904,7 +946,7 @@ function ExerciseCard({ exercise, onDelete, onUpdate }) {
 
       <div className="field-stack">
         <label htmlFor={`exercise-${exercise.id}-weight`}>Carico</label>
-        <div className="weight-input-row">
+        <div className="unit-input-row">
           <input
             id={`exercise-${exercise.id}-weight`}
             type="number"
@@ -916,6 +958,23 @@ function ExerciseCard({ exercise, onDelete, onUpdate }) {
             autoComplete="off"
           />
           <span aria-hidden="true">kg</span>
+        </div>
+      </div>
+
+      <div className="field-stack">
+        <label htmlFor={`exercise-${exercise.id}-rest`}>Recupero</label>
+        <div className="unit-input-row">
+          <input
+            id={`exercise-${exercise.id}-rest`}
+            type="number"
+            value={getNumericInputValue(exercise.rest)}
+            onChange={(event) => onUpdate(exercise.id, "rest", normalizeNumericInputValue(event.target.value))}
+            min="0"
+            step="5"
+            inputMode="numeric"
+            autoComplete="off"
+          />
+          <span aria-hidden="true">sec</span>
         </div>
       </div>
 

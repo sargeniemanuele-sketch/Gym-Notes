@@ -589,6 +589,7 @@ h3 {
   gap: 12px;
 }
 
+.unit-input-row,
 .weight-input-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -596,6 +597,7 @@ h3 {
   gap: 10px;
 }
 
+.unit-input-row span,
 .weight-input-row span {
   color: #475569;
   font-size: 1rem;

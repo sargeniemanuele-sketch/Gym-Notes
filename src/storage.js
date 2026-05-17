@@ -122,6 +122,7 @@ function normalizeExercise(exercise) {
     sets: normalizeSimpleNumberText(exercise.sets),
     reps: normalizeSimpleNumberText(exercise.reps),
     weight: normalizeSimpleNumberText(exercise.weight),
+    rest: normalizeSimpleNumberText(exercise.rest),
     notes: typeof exercise.notes === "string" ? exercise.notes : "",
     createdAt: exerciseCreatedAt,
     updatedAt: typeof exercise.updatedAt === "string" ? exercise.updatedAt : exerciseCreatedAt
@@ -139,7 +140,7 @@ function normalizeSimpleNumberText(value) {
     return "";
   }
 
-  const numberMatch = trimmedValue.match(/^(\d+(?:[.,]\d+)?)(?:\s*kg)?$/i);
+  const numberMatch = trimmedValue.match(/^(\d+(?:[.,]\d+)?)(?:\s*(?:kg|sec))?$/i);
 
   if (!numberMatch) {
     return trimmedValue;
