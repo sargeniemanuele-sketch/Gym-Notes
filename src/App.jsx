@@ -608,7 +608,7 @@ function ExerciseForm({ draft, error, onCancel, onChange, onSubmit }) {
             onChange={(event) => onChange("weight", normalizeNumericInputValue(event.target.value))}
             placeholder="70"
             min="0"
-            step="0.5"
+            step="0.25"
             inputMode="decimal"
             autoComplete="off"
           />
@@ -727,7 +727,7 @@ function ExerciseCard({ exercise, onDelete, onUpdate }) {
             value={getNumericInputValue(exercise.weight)}
             onChange={(event) => onUpdate(exercise.id, "weight", normalizeNumericInputValue(event.target.value))}
             min="0"
-            step="0.5"
+            step="0.25"
             inputMode="decimal"
             autoComplete="off"
           />
