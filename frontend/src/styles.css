@@ -162,7 +162,7 @@ textarea:focus-visible,
 
 .plan-card-actions {
   display: grid;
-  grid-template-columns: 1fr auto;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   align-items: center;
   gap: 10px;
 }
@@ -182,6 +182,13 @@ textarea:focus-visible,
   border: 1px solid var(--red-soft);
   background: var(--surface);
   color: var(--red);
+}
+
+.plan-card-actions .plan-duplicate-button {
+  min-height: 42px;
+  border-radius: 12px;
+  padding: 0 14px;
+  font-size: 0.9rem;
 }
 
 .plan-create-form {
@@ -576,8 +583,14 @@ h3 {
 }
 
 .workout-card-actions .text-danger-button {
-  grid-column: 1 / -1;
-  justify-self: start;
+  width: 100%;
+  min-height: 52px;
+  border: 1px solid var(--red-soft);
+  border-radius: 14px;
+  background: var(--surface);
+  color: var(--red);
+  font-size: 0.98rem;
+  font-weight: 700;
 }
 
 .workout-card-actions .outline-danger-button,
@@ -1047,4 +1060,666 @@ h3 {
   .exercise-edit-actions {
     grid-template-columns: 1fr 1fr;
   }
+
+  .session-actions {
+    grid-template-columns: 1fr auto;
+  }
 }
+
+/* ── Session controls ────────────────────────────────── */
+
+.session-controls {
+  display: grid;
+  gap: 14px;
+  padding: 24px 0;
+  border-top: 1px solid var(--line);
+}
+
+.session-start-button {
+  width: 100%;
+  min-height: 52px;
+  border: 0;
+  border-radius: 14px;
+  padding: 0 18px;
+  background: var(--ink);
+  color: #ffffff;
+  font-size: 0.98rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  touch-action: manipulation;
+}
+
+.session-active {
+  border: 1px solid rgba(201, 100, 66, 0.28);
+  border-radius: 18px;
+  padding: 16px;
+  background: var(--accent-soft);
+}
+
+.session-status {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.session-label {
+  color: var(--accent-ink);
+  font-size: 0.82rem;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.session-timer {
+  font-family: var(--mono);
+  font-size: 1.7rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--accent-ink);
+}
+
+.session-actions {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 1fr auto;
+}
+
+.session-complete-button {
+  min-height: 52px;
+  border: 0;
+  border-radius: 14px;
+  padding: 0 18px;
+  background: var(--accent);
+  color: #ffffff;
+  font-size: 0.98rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  touch-action: manipulation;
+  box-shadow: 0 1px 0 rgba(164, 80, 47, 0.5) inset;
+}
+
+.session-cancel-button {
+  min-height: 52px;
+  border: 1px solid rgba(201, 100, 66, 0.3);
+  border-radius: 14px;
+  padding: 0 16px;
+  background: rgba(255, 255, 255, 0.6);
+  color: var(--accent-ink);
+  font-size: 0.9rem;
+  font-weight: 750;
+  letter-spacing: -0.01em;
+  touch-action: manipulation;
+  white-space: nowrap;
+}
+
+.session-feedback {
+  margin: 0;
+  border-radius: 10px;
+  padding: 10px 14px;
+  background: var(--green-soft);
+  color: var(--green);
+  font-size: 0.92rem;
+  font-weight: 700;
+  text-align: center;
+}
+
+/* ── Sets tracker ────────────────────────────────────── */
+
+.sets-tracker {
+  display: grid;
+  gap: 10px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line-soft);
+}
+
+.sets-tracker--all-done {
+  border-radius: 12px;
+  padding: 12px;
+  background: var(--green-soft);
+  border-top: none;
+  margin-top: 14px;
+}
+
+.sets-tracker-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.sets-tracker-label {
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  font-weight: 750;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.sets-tracker-count {
+  color: var(--ink-2);
+  font-size: 0.88rem;
+  font-weight: 700;
+}
+
+.sets-tracker--all-done .sets-tracker-label,
+.sets-tracker--all-done .sets-tracker-count {
+  color: var(--green);
+}
+
+.sets-tracker-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.set-btn {
+  min-width: 44px;
+  min-height: 44px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 0 12px;
+  background: var(--surface-2);
+  color: var(--ink-2);
+  font-size: 0.92rem;
+  font-weight: 700;
+  touch-action: manipulation;
+  transition: background 0.1s, border-color 0.1s, color 0.1s;
+}
+
+.set-btn--done {
+  border-color: rgba(79, 126, 84, 0.35);
+  background: var(--green-soft);
+  color: var(--green);
+}
+
+.sets-tracker-hint {
+  margin: 0;
+  color: var(--subtle);
+  font-size: 0.84rem;
+  font-style: italic;
+}
+
+/* ── App shell with timer bar ────────────────────────── */
+
+.app-shell--with-bar {
+  padding-bottom: calc(96px + env(safe-area-inset-bottom));
+}
+
+/* ── Active timer bar ────────────────────────────────── */
+
+.active-timer-bar {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 12px 18px calc(12px + env(safe-area-inset-bottom));
+  border-top: 1px solid var(--line);
+  background: var(--surface);
+  box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.08);
+}
+
+.active-timer-bar--finished {
+  background: var(--green-soft);
+  border-top-color: rgba(79, 126, 84, 0.25);
+}
+
+.active-timer-bar--paused {
+  background: var(--amber-soft);
+  border-top-color: rgba(189, 134, 47, 0.25);
+}
+
+.active-timer-bar-info {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  flex: 1 1 0;
+  border: 0;
+  border-radius: 10px;
+  padding: 6px 8px;
+  margin: -6px -8px;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: background 0.12s;
+}
+
+.active-timer-bar-info:hover,
+.active-timer-bar-info:focus-visible {
+  background: rgba(0, 0, 0, 0.05);
+}
+
+.active-timer-bar--finished .active-timer-bar-info:hover,
+.active-timer-bar--finished .active-timer-bar-info:focus-visible {
+  background: rgba(79, 126, 84, 0.12);
+}
+
+.active-timer-bar--paused .active-timer-bar-info:hover,
+.active-timer-bar--paused .active-timer-bar-info:focus-visible {
+  background: rgba(189, 134, 47, 0.12);
+}
+
+.active-timer-bar-label {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.active-timer-bar-time {
+  margin: 0;
+  color: var(--ink);
+  font-family: var(--mono);
+  font-size: 1.45rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+}
+
+.active-timer-bar--finished .active-timer-bar-time {
+  color: var(--green);
+}
+
+.active-timer-bar--paused .active-timer-bar-time {
+  color: var(--amber);
+}
+
+.active-timer-bar-done,
+.active-timer-bar-paused-label {
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  vertical-align: middle;
+}
+
+.active-timer-bar-done {
+  color: var(--green);
+}
+
+.active-timer-bar-paused-label {
+  color: var(--amber);
+}
+
+.active-timer-bar-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.active-timer-bar-btn {
+  min-height: 44px;
+  border: 0;
+  border-radius: 12px;
+  padding: 0 16px;
+  background: var(--ink);
+  color: #ffffff;
+  font-size: 0.9rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  touch-action: manipulation;
+  white-space: nowrap;
+}
+
+.active-timer-bar-btn--ghost {
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink-2);
+}
+
+/* ── Plan tabs ───────────────────────────────────────── */
+
+.plan-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 5px;
+  padding: 5px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--bg-2);
+  margin-bottom: 2px;
+}
+
+.plan-tab {
+  min-height: 44px;
+  border: 0;
+  border-radius: 11px;
+  padding: 0 8px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.84rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  touch-action: manipulation;
+  transition: background 0.15s, color 0.15s;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.plan-tab--active {
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+}
+
+/* ── History panel ───────────────────────────────────── */
+
+.history-panel {
+  padding-bottom: 40px;
+}
+
+.history-empty {
+  margin-top: 4px;
+}
+
+.session-card-list {
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.session-card {
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.session-card-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 16px 18px;
+}
+
+.session-card-info {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.session-card-name {
+  margin: 0;
+  color: var(--ink);
+  font-size: 1rem;
+  font-weight: 720;
+  letter-spacing: -0.015em;
+  overflow-wrap: anywhere;
+}
+
+.session-card-meta {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.88rem;
+  font-weight: 650;
+  font-family: var(--mono);
+}
+
+.session-card-count {
+  margin: 0;
+  color: var(--subtle);
+  font-size: 0.84rem;
+  font-weight: 650;
+}
+
+.session-card-toggle {
+  flex: 0 0 auto;
+  min-height: 38px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 0 14px;
+  background: var(--surface);
+  color: var(--ink-2);
+  font-size: 0.86rem;
+  font-weight: 750;
+  touch-action: manipulation;
+}
+
+.session-card-body {
+  border-top: 1px solid var(--line-soft);
+  padding: 16px 18px 18px;
+  background: var(--surface-2);
+}
+
+.session-exercise-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 18px;
+}
+
+.session-exercise-item {
+  display: grid;
+  gap: 6px;
+}
+
+.session-exercise-name {
+  margin: 0;
+  color: var(--ink);
+  font-size: 0.97rem;
+  font-weight: 720;
+  letter-spacing: -0.01em;
+}
+
+.session-exercise-sets {
+  margin: 0;
+  color: var(--ink-2);
+  font-size: 0.93rem;
+  font-weight: 650;
+  font-family: var(--mono);
+}
+
+.session-exercise-fields {
+  display: grid;
+  gap: 4px;
+  margin: 4px 0 0;
+}
+
+.session-exercise-field {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  flex-wrap: wrap;
+}
+
+.session-exercise-field dt {
+  flex: 0 0 auto;
+  color: var(--subtle);
+  font-size: 0.8rem;
+  font-weight: 750;
+  font-family: var(--mono);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  min-width: 70px;
+}
+
+.session-exercise-field dd {
+  margin: 0;
+  color: var(--ink-2);
+  font-size: 0.9rem;
+  font-weight: 650;
+}
+
+.session-exercise-field--notes dd {
+  font-style: italic;
+}
+
+.session-card-empty {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.93rem;
+}
+
+/* ── Progress panel ──────────────────────────────────── */
+
+.progress-panel {
+  padding-bottom: 40px;
+}
+
+.progress-empty {
+  margin-top: 4px;
+}
+
+.progress-exercise-list {
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.progress-card {
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.progress-card-summary {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 16px 18px;
+}
+
+.progress-card-info {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  flex: 1 1 0;
+}
+
+.progress-card-name {
+  margin: 0;
+  color: var(--ink);
+  font-size: 1rem;
+  font-weight: 720;
+  letter-spacing: -0.015em;
+  overflow-wrap: anywhere;
+}
+
+.progress-card-weights {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 20px;
+}
+
+.progress-weight-item {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.progress-weight-label {
+  color: var(--subtle);
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  font-weight: 750;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.progress-weight-value {
+  color: var(--ink);
+  font-size: 1rem;
+  font-weight: 720;
+  letter-spacing: -0.01em;
+}
+
+.progress-card-meta {
+  margin: 0;
+  color: var(--subtle);
+  font-size: 0.82rem;
+  font-weight: 650;
+}
+
+.progress-card-toggle {
+  flex: 0 0 auto;
+  min-height: 38px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 0 14px;
+  background: var(--surface);
+  color: var(--ink-2);
+  font-size: 0.86rem;
+  font-weight: 750;
+  touch-action: manipulation;
+}
+
+.progress-card-body {
+  border-top: 1px solid var(--line-soft);
+  padding: 14px 18px 18px;
+  background: var(--surface-2);
+}
+
+.progress-history-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 16px;
+}
+
+.progress-history-item {
+  display: grid;
+  gap: 6px;
+}
+
+.progress-history-item + .progress-history-item {
+  padding-top: 16px;
+  border-top: 1px solid var(--line-soft);
+}
+
+.progress-history-date {
+  margin: 0;
+  color: var(--ink-2);
+  font-size: 0.88rem;
+  font-weight: 720;
+  letter-spacing: -0.01em;
+}
+
+.progress-history-fields {
+  display: grid;
+  gap: 3px;
+  margin: 2px 0 0;
+}
+
+.progress-history-field {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  flex-wrap: wrap;
+}
+
+.progress-history-field dt {
+  flex: 0 0 auto;
+  color: var(--subtle);
+  font-size: 0.78rem;
+  font-weight: 750;
+  font-family: var(--mono);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  min-width: 62px;
+}
+
+.progress-history-field dd {
+  margin: 0;
+  color: var(--ink-2);
+  font-size: 0.9rem;
+  font-weight: 650;
+}
+

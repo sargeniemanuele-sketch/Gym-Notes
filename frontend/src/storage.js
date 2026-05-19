@@ -126,12 +126,45 @@ function normalizePlan(data) {
     pdfName: typeof data.pdfName === "string" ? data.pdfName : undefined,
     pdfSize: typeof data.pdfSize === "number" ? data.pdfSize : undefined,
     pdfUpdatedAt: typeof data.pdfUpdatedAt === "string" ? data.pdfUpdatedAt : undefined,
-    workouts: data.workouts.filter(isObject).map(normalizeWorkout)
+    workouts: Array.isArray(data.workouts) ? data.workouts.filter(isObject).map(normalizeWorkout) : [],
+    sessions: Array.isArray(data.sessions) ? data.sessions.filter(isObject).map(normalizeSession) : []
   };
 }
 
 function isObject(value) {
   return value && typeof value === "object";
+}
+
+function normalizeSession(session) {
+  return {
+    id: typeof session.id === "string" ? session.id : createId(),
+    planId: typeof session.planId === "string" ? session.planId : "",
+    workoutId: typeof session.workoutId === "string" ? session.workoutId : "",
+    workoutName: typeof session.workoutName === "string" ? session.workoutName : "",
+    startedAt: typeof session.startedAt === "string" ? session.startedAt : new Date().toISOString(),
+    completedAt: typeof session.completedAt === "string" ? session.completedAt : new Date().toISOString(),
+    durationSeconds: typeof session.durationSeconds === "number" ? session.durationSeconds : 0,
+    exercises: Array.isArray(session.exercises) ? session.exercises.filter(isObject).map(normalizeSessionExercise) : []
+  };
+}
+
+function normalizeSessionExercise(ex) {
+  const rawCompletedSets = ex.completedSets;
+  const completedSets =
+    typeof rawCompletedSets === "number" && Number.isFinite(rawCompletedSets) && rawCompletedSets >= 0
+      ? Math.floor(rawCompletedSets)
+      : 0;
+
+  return {
+    exerciseId: typeof ex.exerciseId === "string" ? ex.exerciseId : "",
+    name: typeof ex.name === "string" ? ex.name : "",
+    sets: typeof ex.sets === "string" ? ex.sets : "",
+    reps: typeof ex.reps === "string" ? ex.reps : "",
+    weight: typeof ex.weight === "string" ? ex.weight : "",
+    rest: typeof ex.rest === "string" ? ex.rest : "",
+    notes: typeof ex.notes === "string" ? ex.notes : "",
+    completedSets
+  };
 }
 
 function normalizeWorkout(workout) {
