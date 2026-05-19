@@ -427,6 +427,38 @@ h3 {
   padding: 18px 0 24px;
 }
 
+.page-header .inline-secondary-button {
+  margin-top: 16px;
+}
+
+.detail-meta {
+  margin: 12px 0 0;
+  color: var(--muted);
+  font-size: 0.98rem;
+  font-weight: 650;
+  line-height: 1.45;
+}
+
+.inline-secondary-button {
+  min-height: 42px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 0 14px;
+  background: var(--surface);
+  color: var(--ink-2);
+  font-size: 0.9rem;
+  font-weight: 750;
+}
+
+.rename-panel {
+  display: grid;
+  gap: 14px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: 16px;
+  background: var(--surface);
+}
+
 .plan-name {
   margin: 12px 0 0;
   color: var(--muted);
@@ -543,6 +575,11 @@ h3 {
   gap: 10px;
 }
 
+.workout-card-actions .text-danger-button {
+  grid-column: 1 / -1;
+  justify-self: start;
+}
+
 .workout-card-actions .outline-danger-button,
 .workout-card-actions .ghost-button {
   margin-top: 0;
@@ -611,6 +648,20 @@ h3 {
   line-height: 1.45;
 }
 
+.pdf-file-copy {
+  display: grid;
+  gap: 4px;
+}
+
+.pdf-file-copy span {
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
 .pdf-actions {
   display: grid;
   gap: 10px;
@@ -627,6 +678,16 @@ h3 {
 .pdf-actions .danger-button {
   margin-top: 0;
   background: var(--surface);
+}
+
+.pdf-actions .outline-danger-button {
+  border: 1px solid var(--red-soft);
+  background: var(--surface);
+  color: var(--red);
+}
+
+.account-actions-section {
+  padding-bottom: 10px;
 }
 
 .pdf-page-control {

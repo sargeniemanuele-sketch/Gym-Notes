@@ -143,6 +143,7 @@ function App() {
   const [gymData, setGymData] = useState(() => loadGymData());
   const [isPlanOpen, setIsPlanOpen] = useState(false);
   const [isNewPlanFormOpen, setIsNewPlanFormOpen] = useState(false);
+  const [isRenamingPlan, setIsRenamingPlan] = useState(false);
   const [selectedWorkoutId, setSelectedWorkoutId] = useState(null);
   const [planName, setPlanName] = useState("");
   const [workoutName, setWorkoutName] = useState("");
@@ -332,6 +333,7 @@ function App() {
     setIsNewPlanFormOpen(false);
     setSelectedWorkoutId(null);
     setActiveTimer(null);
+    setIsRenamingPlan(false);
     setPlanName("");
   }
 
@@ -344,6 +346,7 @@ function App() {
     persistNextData(nextData);
     setIsPlanOpen(true);
     setIsNewPlanFormOpen(false);
+    setIsRenamingPlan(false);
     setSelectedWorkoutId(null);
     setActiveTimer(null);
     setIsNewWorkoutFormOpen(false);
@@ -390,6 +393,7 @@ function App() {
       setIsPlanOpen(false);
       setSelectedWorkoutId(null);
       setActiveTimer(null);
+      setIsRenamingPlan(false);
       setIsNewWorkoutFormOpen(false);
       setEditingWorkoutId(null);
     }
@@ -402,6 +406,7 @@ function App() {
     setIsPlanOpen(false);
     setSelectedWorkoutId(null);
     setActiveTimer(null);
+    setIsRenamingPlan(false);
     setIsNewWorkoutFormOpen(false);
     setEditingWorkoutId(null);
     setIsExerciseFormOpen(false);
@@ -538,6 +543,7 @@ function App() {
     setGymData(null);
     setIsPlanOpen(false);
     setIsNewPlanFormOpen(false);
+    setIsRenamingPlan(false);
     setSelectedWorkoutId(null);
     setPlanName("");
     setWorkoutName("");
@@ -755,6 +761,7 @@ function App() {
       <main className="app-shell">
         <section className="plans-panel" aria-labelledby="app-title">
           <header className="plans-header">
+            <p className="eyebrow">Scheda locale sul tuo dispositivo</p>
             <div className="brand-title-row">
               <img className="brand-mark" src="/icons/icon-192.png" alt="" aria-hidden="true" />
               <h1 id="app-title">Gym Notes</h1>
@@ -831,27 +838,42 @@ function App() {
     return (
       <main className="app-shell">
         <section className="screen-panel">
-          <div className="top-nav-row">
-            <button className="back-button" type="button" onClick={() => setSelectedWorkoutId(null)}>
-              ← Torna
-            </button>
-            <button className="back-button" type="button" onClick={handleBackToPlans}>
-              ← Le tue schede
-            </button>
-          </div>
+          <button className="back-button plans-back-button" type="button" onClick={() => setSelectedWorkoutId(null)}>
+            ← Torna alla scheda
+          </button>
 
           <header className="page-header">
-            <p className="eyebrow">Oggi: {todayLabel}</p>
-            <label className="sr-only" htmlFor="detail-workout-name">Nome allenamento</label>
-            <input
-              className="title-input"
-              id="detail-workout-name"
-              type="text"
-              value={selectedWorkout.name}
-              onChange={(event) => handleWorkoutNameChange(selectedWorkout.id, event.target.value)}
-              placeholder="Nome allenamento"
-              autoComplete="off"
-            />
+            {editingWorkoutId === selectedWorkout.id ? (
+              <div className="rename-panel">
+                <div className="field-stack">
+                  <label htmlFor="detail-workout-name">Nome allenamento</label>
+                  <input
+                    id="detail-workout-name"
+                    type="text"
+                    value={selectedWorkout.name}
+                    onChange={(event) => handleWorkoutNameChange(selectedWorkout.id, event.target.value)}
+                    placeholder="Nome allenamento"
+                    autoComplete="off"
+                  />
+                </div>
+                <div className="form-actions">
+                  <button type="button" onClick={() => setEditingWorkoutId(null)}>
+                    Fine
+                  </button>
+                  <button className="ghost-button" type="button" onClick={() => setEditingWorkoutId(null)}>
+                    Annulla
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <>
+                <h1>{selectedWorkout.name || "Allenamento senza nome"}</h1>
+                <p className="detail-meta">Scheda: {activePlan.name || "Scheda senza nome"} · Oggi {todayLabel}</p>
+                <button className="inline-secondary-button" type="button" onClick={() => setEditingWorkoutId(selectedWorkout.id)}>
+                  Rinomina allenamento
+                </button>
+              </>
+            )}
           </header>
 
           {activePlan.pdfId && (
@@ -926,55 +948,38 @@ function App() {
         </button>
 
         <header className="page-header">
-          <p className="eyebrow">Oggi: {todayLabel}</p>
-          <h1>Gym Notes</h1>
-          <label className="sr-only" htmlFor="plan-name-edit">Nome scheda</label>
-          <input
-            className="plan-name-input"
-            id="plan-name-edit"
-            type="text"
-            value={activePlan.name}
-            onChange={(event) => handlePlanNameChange(event.target.value)}
-            placeholder="Nome scheda"
-            autoComplete="off"
-          />
-        </header>
-
-        <section className="content-section" aria-labelledby="original-pdf-title">
-          <div className="section-title-row">
-            <h2 id="original-pdf-title">Scheda originale PDF</h2>
-            {saveStatus && <span className="save-status">{saveStatus}</span>}
-          </div>
-
-          <div className="pdf-home-card">
-            {activePlan.pdfId ? (
-              <p>PDF caricato: {activePlan.pdfName}</p>
-            ) : (
-              <p>Nessun PDF caricato</p>
-            )}
-
-            <input
-              className="sr-only"
-              ref={pdfInputRef}
-              type="file"
-              accept="application/pdf"
-              onChange={handlePdfFileChange}
-            />
-
-            <div className="pdf-actions">
-              <button type="button" onClick={() => pdfInputRef.current?.click()}>
-                {activePlan.pdfId ? "Sostituisci PDF" : "Carica PDF"}
-              </button>
-              {activePlan.pdfId && (
-                <button className="danger-button" type="button" onClick={handleRemovePdf}>
-                  Rimuovi PDF
+          {isRenamingPlan ? (
+            <div className="rename-panel">
+              <div className="field-stack">
+                <label htmlFor="plan-name-edit">Nome scheda</label>
+                <input
+                  id="plan-name-edit"
+                  type="text"
+                  value={activePlan.name}
+                  onChange={(event) => handlePlanNameChange(event.target.value)}
+                  placeholder="Nome scheda"
+                  autoComplete="off"
+                />
+              </div>
+              <div className="form-actions">
+                <button type="button" onClick={() => setIsRenamingPlan(false)}>
+                  Fine
                 </button>
-              )}
+                <button className="ghost-button" type="button" onClick={() => setIsRenamingPlan(false)}>
+                  Annulla
+                </button>
+              </div>
             </div>
-
-            {pdfError && <p className="field-error">{pdfError}</p>}
-          </div>
-        </section>
+          ) : (
+            <>
+              <h1>{activePlan.name || "Scheda senza nome"}</h1>
+              <p className="detail-meta">Scheda attiva · Oggi {todayLabel}</p>
+              <button className="inline-secondary-button" type="button" onClick={() => setIsRenamingPlan(true)}>
+                Rinomina scheda
+              </button>
+            </>
+          )}
+        </header>
 
         <section className="content-section" aria-labelledby="workouts-title">
           <div className="section-title-row">
@@ -1026,7 +1031,48 @@ function App() {
           )}
 
           {saveWarning && <p className="warning">{saveWarning}</p>}
+        </section>
 
+        <section className="content-section pdf-support-section" aria-labelledby="original-pdf-title">
+          <div className="section-title-row">
+            <h2 id="original-pdf-title">Scheda originale PDF</h2>
+            {saveStatus && <span className="save-status">{saveStatus}</span>}
+          </div>
+
+          <div className="pdf-home-card">
+            {activePlan.pdfId ? (
+              <div className="pdf-file-copy">
+                <span>PDF caricato</span>
+                <p>{activePlan.pdfName}</p>
+              </div>
+            ) : (
+              <p>Nessun PDF caricato</p>
+            )}
+
+            <input
+              className="sr-only"
+              ref={pdfInputRef}
+              type="file"
+              accept="application/pdf"
+              onChange={handlePdfFileChange}
+            />
+
+            <div className="pdf-actions">
+              <button type="button" onClick={() => pdfInputRef.current?.click()}>
+                {activePlan.pdfId ? "Sostituisci" : "Carica PDF"}
+              </button>
+              {activePlan.pdfId && (
+                <button className="outline-danger-button pdf-danger-button" type="button" onClick={handleRemovePdf}>
+                  Rimuovi
+                </button>
+              )}
+            </div>
+
+            {pdfError && <p className="field-error">{pdfError}</p>}
+          </div>
+        </section>
+
+        <section className="content-section account-actions-section">
           <button className="reset-button" type="button" onClick={handleResetData}>
             Reset dati
           </button>
@@ -1103,15 +1149,11 @@ function WorkoutCard({ editingWorkoutId, onDelete, onFinishRename, onOpen, onRen
       <div className="workout-card-actions">
         {isRenaming ? (
           <>
-            <button
-              className="outline-danger-button"
-              type="button"
-              onClick={() => onDelete(workout.id)}
-            >
-              Elimina
+            <button type="button" onClick={onFinishRename}>
+              Fine
             </button>
             <button className="ghost-button" type="button" onClick={onFinishRename}>
-              salva
+              Annulla
             </button>
           </>
         ) : (
@@ -1120,7 +1162,14 @@ function WorkoutCard({ editingWorkoutId, onDelete, onFinishRename, onOpen, onRen
               Apri
             </button>
             <button className="ghost-button" type="button" onClick={() => onStartRename(workout.id)}>
-              Modifica
+              Rinomina
+            </button>
+            <button
+              className="text-danger-button"
+              type="button"
+              onClick={() => onDelete(workout.id)}
+            >
+              Elimina
             </button>
           </>
         )}
