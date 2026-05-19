@@ -4,34 +4,28 @@ import PlanCard from "./PlanCard.jsx";
 
 function PlanList({
   auth,
-  cloudStatus,
   hasTimerBar,
   isNewPlanFormOpen,
   onCancelCreatePlan,
   onCreatePlan,
   onDeletePlan,
-  onDownloadFromCloud,
   onDuplicatePlan,
   onLogout,
   onOpenNewPlanForm,
   onOpenPlan,
   onPlanNameChange,
-  onUploadToCloud,
   planName,
-  plans,
-  saveWarning,
-  storageAvailable
+  plans
 }) {
   return (
     <main className={`app-shell${hasTimerBar ? " app-shell--with-bar" : ""}`}>
       <section className="plans-panel" aria-labelledby="app-title">
         <header className="plans-header">
-          <p className="eyebrow">Scheda locale sul tuo dispositivo</p>
+          <p className="eyebrow">Le tue schede</p>
           <div className="brand-title-row">
             <img className="brand-mark" src="/icons/icon-192.png" alt="" aria-hidden="true" />
             <h1 id="app-title">Gym Notes</h1>
           </div>
-          <p className="subtitle">Le tue schede</p>
         </header>
 
         {plans.length === 0 ? (
@@ -94,20 +88,7 @@ function PlanList({
           </>
         )}
 
-        {!storageAvailable && (
-          <p className="warning">
-            Il salvataggio locale non è disponibile su questo browser. I dati potrebbero non essere mantenuti.
-          </p>
-        )}
-        {saveWarning && <p className="warning">{saveWarning}</p>}
-
-        <AccountCard
-          auth={auth}
-          cloudStatus={cloudStatus}
-          onLogout={onLogout}
-          onUpload={onUploadToCloud}
-          onDownload={onDownloadFromCloud}
-        />
+        <AccountCard auth={auth} onLogout={onLogout} />
       </section>
     </main>
   );
