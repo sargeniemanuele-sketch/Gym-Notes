@@ -48,6 +48,10 @@ router.post("/register", async (req, res, next) => {
 
     res.status(201).json({ token, user: safeUser(user) });
   } catch (err) {
+    if (err.code === 11000) {
+      return res.status(409).json({ error: "Email già registrata" });
+    }
+
     next(err);
   }
 });

@@ -5,7 +5,13 @@ import ActiveTimerBar from "./components/ActiveTimerBar.jsx";
 import PlanDetail from "./components/PlanDetail.jsx";
 import PlanList from "./components/PlanList.jsx";
 import WorkoutDetail from "./components/WorkoutDetail.jsx";
-import { deletePdfFile, savePdfFile } from "./pdfStorage.js";
+import {
+  deletePdfFile,
+  deletePlanPdfReference,
+  getAllPlanPdfReferences,
+  savePdfFile,
+  savePlanPdfReference
+} from "./pdfStorage.js";
 import { createId, normalizeGymData } from "./storage.js";
 import { getTodayLabel } from "./utils/formatters.js";
 import { normalizeNumericInputValue } from "./utils/numbers.js";
@@ -53,6 +59,10 @@ function App() {
   const saveStatusTimeoutRef = useRef(null);
   const sessionFeedbackTimeoutRef = useRef(null);
   const cloudSaveTimerRef = useRef(null);
+  const cloudSaveInFlightRef = useRef(false);
+  const pendingCloudDataRef = useRef(null);
+  const cloudSaveTokenRef = useRef(null);
+  const isCompletingSessionRef = useRef(false);
   const notifiedTimerRef = useRef(null);
   const pdfInputRef = useRef(null);
   const todayLabel = useMemo(() => getTodayLabel(), []);
@@ -125,24 +135,62 @@ function App() {
     setGymData(normalizedData);
   }
 
+  async function applyCloudGymData(nextData) {
+    const normalizedData = normalizeRemoteData(nextData);
+    setGymData(await mergeLocalPdfReferences(normalizedData));
+  }
+
   function persistNextData(nextData) {
     const normalizedData = normalizeRemoteData(nextData);
     applyGymData(normalizedData);
-    if (cloudSaveTimerRef.current) clearTimeout(cloudSaveTimerRef.current);
-    cloudSaveTimerRef.current = setTimeout(() => {
-      const token = auth?.token;
-      if (!token) return;
-      saveRemoteGymData(token, sanitizeForCloud(normalizedData)).catch((err) => {
-        if (err.status === 401) {
-          clearAuth();
-          setAuth(null);
-          setSaveWarning("Sessione scaduta. Accedi di nuovo per sincronizzare.");
-          return;
-        }
+    scheduleCloudSave(normalizedData);
+  }
 
-        setSaveWarning("Cloud non disponibile. Le modifiche restano in memoria e verranno risincronizzate più avanti.");
-      });
-    }, 1200);
+  function scheduleCloudSave(nextData) {
+    pendingCloudDataRef.current = nextData;
+    cloudSaveTokenRef.current = auth?.token ?? null;
+
+    if (cloudSaveTimerRef.current) clearTimeout(cloudSaveTimerRef.current);
+    cloudSaveTimerRef.current = setTimeout(flushCloudSave, 1200);
+  }
+
+  async function flushCloudSave() {
+    if (cloudSaveInFlightRef.current) {
+      return;
+    }
+
+    const token = cloudSaveTokenRef.current;
+    const nextData = pendingCloudDataRef.current;
+
+    if (!token || !nextData) {
+      return;
+    }
+
+    pendingCloudDataRef.current = null;
+    cloudSaveInFlightRef.current = true;
+
+    try {
+      await saveRemoteGymData(token, sanitizeForCloud(nextData));
+      setSaveWarning((current) =>
+        current.startsWith("Cloud non disponibile") ? "" : current
+      );
+    } catch (err) {
+      if (err.status === 401) {
+        clearAuth();
+        setAuth(null);
+        pendingCloudDataRef.current = null;
+        setSaveWarning("Sessione scaduta. Accedi di nuovo per sincronizzare.");
+        return;
+      }
+
+      setSaveWarning("Cloud non disponibile. Le modifiche restano in memoria e verranno risincronizzate più avanti.");
+    } finally {
+      cloudSaveInFlightRef.current = false;
+    }
+
+    if (pendingCloudDataRef.current) {
+      flushCloudSave();
+    }
   }
 
   function persistNextActivePlan(nextPlan) {
@@ -188,22 +236,27 @@ function App() {
 
     try {
       if (verifyToken) {
-        await getMe(token);
+        const currentUser = await getMe(token);
+        const nextAuth = { token, user: currentUser.user };
+        saveAuth(nextAuth);
+        setAuth(nextAuth);
       }
 
       const remote = await getRemoteGymData(token);
-      applyGymData(remote.data ?? { activePlanId: null, plans: [] });
+      await applyCloudGymData(remote.data ?? { activePlanId: null, plans: [] });
       showSavedStatus("Dati cloud caricati");
+      return true;
     } catch (err) {
       if (err.status === 401) {
         clearAuth();
         setAuth(null);
         setGymData(null);
-        return;
+        return false;
       }
 
       setCloudLoadError("Cloud non disponibile. Riprova tra poco.");
       setGymData(null);
+      return false;
     } finally {
       setIsLoadingData(false);
     }
@@ -211,16 +264,16 @@ function App() {
 
   async function handleLogin(email, password) {
     const result = await apiLogin(email, password);
-    saveAuth(result);
     setAuth(result);
-    await loadCloudData(result.token);
+    const loaded = await loadCloudData(result.token);
+    if (loaded) saveAuth(result);
   }
 
   async function handleRegister(email, password) {
     const result = await apiRegister(email, password);
-    saveAuth(result);
     setAuth(result);
-    await loadCloudData(result.token);
+    const loaded = await loadCloudData(result.token);
+    if (loaded) saveAuth(result);
   }
 
   function handleLogout() {
@@ -228,6 +281,8 @@ function App() {
       clearTimeout(cloudSaveTimerRef.current);
       cloudSaveTimerRef.current = null;
     }
+    pendingCloudDataRef.current = null;
+    cloudSaveTokenRef.current = null;
 
     clearAuth();
     setAuth(null);
@@ -237,31 +292,8 @@ function App() {
     setSelectedWorkoutId(null);
     setActiveTimer(null);
     setActiveSession(null);
+    isCompletingSessionRef.current = false;
     setSaveWarning("");
-  }
-
-  async function handleSyncNow() {
-    const token = auth?.token;
-
-    if (!token) {
-      setSaveWarning("Accedi per sincronizzare i dati con il cloud.");
-      return;
-    }
-
-    try {
-      await saveRemoteGymData(token, sanitizeForCloud(gymData ?? { activePlanId: null, plans: [] }));
-      setSaveWarning("");
-      showSavedStatus("Sincronizzazione completata");
-    } catch (err) {
-      if (err.status === 401) {
-        clearAuth();
-        setAuth(null);
-        setSaveWarning("Sessione scaduta. Accedi di nuovo per sincronizzare.");
-        return;
-      }
-
-      setSaveWarning("Cloud non disponibile. Riprova tra poco.");
-    }
   }
 
   function handleStartSession(workoutId) {
@@ -283,13 +315,15 @@ function App() {
       startedAt: new Date().toISOString(),
       completedSetsByExercise: {}
     });
+    isCompletingSessionRef.current = false;
     setSessionFeedback("");
   }
 
   function handleCompleteSession() {
-    if (!activeSession || !activePlan) {
+    if (!activeSession || !activePlan || isCompletingSessionRef.current) {
       return;
     }
+    isCompletingSessionRef.current = true;
 
     const completedAt = new Date().toISOString();
     const durationSeconds = Math.floor(
@@ -358,6 +392,7 @@ function App() {
     }
 
     setActiveSession(null);
+    isCompletingSessionRef.current = false;
   }
 
   function handleStartRestTimer(exerciseId, durationSeconds, exerciseName = "", workoutName = "", workoutId = "", planId = "") {
@@ -540,7 +575,7 @@ function App() {
     showSavedStatus("Scheda eliminata");
 
     if (planToDelete.pdfId) {
-      deletePdfFile(planToDelete.pdfId).catch(() => {
+      Promise.all([deletePdfFile(planToDelete.pdfId), deletePlanPdfReference(planToDelete.id)]).catch(() => {
         setSaveWarning("La scheda è stata eliminata, ma non è stato possibile rimuovere il PDF da IndexedDB.");
       });
     }
@@ -773,7 +808,7 @@ function App() {
   }
 
   function handleResetData() {
-    const confirmed = window.confirm("Vuoi cancellare tutte le schede e tutti i dati salvati su questo dispositivo?");
+    const confirmed = window.confirm("Vuoi cancellare tutte le schede e tutti i dati salvati nel cloud?");
 
     if (!confirmed) {
       return;
@@ -800,8 +835,11 @@ function App() {
     showSavedStatus("Dati resettati");
     setSaveWarning("");
 
-    if (pdfIds.length > 0) {
-      Promise.all(pdfIds.map((pdfId) => deletePdfFile(pdfId))).catch(() => {
+    if (pdfIds.length > 0 || plans.length > 0) {
+      Promise.all([
+        ...pdfIds.map((pdfId) => deletePdfFile(pdfId)),
+        ...plans.map((plan) => deletePlanPdfReference(plan.id))
+      ]).catch(() => {
         setSaveWarning("I dati sono stati cancellati, ma non è stato possibile rimuovere tutti i PDF da IndexedDB.");
       });
     }
@@ -848,9 +886,17 @@ function App() {
         updatedAt: pdfUpdatedAt
       };
 
+      await savePlanPdfReference(activePlan.id, {
+        pdfId,
+        pdfName: file.name,
+        pdfSize: file.size,
+        pdfUpdatedAt
+      });
+
       persistNextActivePlan(nextPlan);
       showSavedStatus("PDF salvato sul dispositivo");
     } catch {
+      deletePdfFile(pdfId).catch(() => {});
       setPdfError("Non è stato possibile salvare il PDF su questo dispositivo.");
     }
   }
@@ -868,6 +914,7 @@ function App() {
 
     try {
       await deletePdfFile(activePlan.pdfId);
+      await deletePlanPdfReference(activePlan.id);
     } catch {
       setPdfError("Non è stato possibile rimuovere il PDF da IndexedDB.");
       return;
@@ -1061,7 +1108,6 @@ function App() {
           onOpenNewPlanForm={() => setIsNewPlanFormOpen(true)}
           onOpenPlan={handleOpenPlan}
           onPlanNameChange={setPlanName}
-          onSyncNow={handleSyncNow}
           planName={planName}
           plans={plans}
           saveStatus={saveStatus}
@@ -1171,6 +1217,34 @@ function updateWorkoutInPlan(gymPlan, workoutId, updateWorkout) {
 
 function normalizeRemoteData(data) {
   return normalizeGymData(data ?? { activePlanId: null, plans: [] });
+}
+
+async function mergeLocalPdfReferences(data) {
+  try {
+    const references = await getAllPlanPdfReferences();
+    const referencesByPlanId = new Map(references.map((reference) => [reference.planId, reference]));
+
+    return {
+      ...data,
+      plans: data.plans.map((plan) => {
+        const reference = referencesByPlanId.get(plan.id);
+
+        if (!reference?.pdfId) {
+          return plan;
+        }
+
+        return {
+          ...plan,
+          pdfId: reference.pdfId,
+          pdfName: reference.pdfName,
+          pdfSize: reference.pdfSize,
+          pdfUpdatedAt: reference.pdfUpdatedAt
+        };
+      })
+    };
+  } catch {
+    return data;
+  }
 }
 
 function playTimerBeep() {

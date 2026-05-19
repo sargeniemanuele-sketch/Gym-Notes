@@ -6,8 +6,16 @@ export function loadAuth() {
     const token = localStorage.getItem(TOKEN_KEY);
     const userRaw = localStorage.getItem(USER_KEY);
     if (!token || !userRaw) return null;
-    return { token, user: JSON.parse(userRaw) };
+    const user = JSON.parse(userRaw);
+
+    if (!user || typeof user !== "object" || typeof user.email !== "string") {
+      clearAuth();
+      return null;
+    }
+
+    return { token, user };
   } catch {
+    clearAuth();
     return null;
   }
 }

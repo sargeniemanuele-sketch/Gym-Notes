@@ -14,7 +14,6 @@ function PlanList({
   onOpenNewPlanForm,
   onOpenPlan,
   onPlanNameChange,
-  onSyncNow,
   planName,
   plans,
   saveStatus,
@@ -94,7 +93,6 @@ function PlanList({
         <AccountCard
           auth={auth}
           onLogout={onLogout}
-          onSyncNow={onSyncNow}
           saveStatus={saveStatus}
           saveWarning={saveWarning}
         />

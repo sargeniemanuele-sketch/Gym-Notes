@@ -2,28 +2,18 @@
 
 const PDF_FIELDS = ["pdfId", "pdfName", "pdfSize", "pdfUpdatedAt"];
 
-function sanitizePlan(plan) {
-  if (!plan || typeof plan !== "object") return plan;
-
-  const clean = { ...plan };
-
-  for (const field of PDF_FIELDS) {
-    delete clean[field];
+function sanitizeGymData(data) {
+  if (Array.isArray(data)) {
+    return data.map(sanitizeGymData);
   }
 
-  return clean;
-}
-
-function sanitizeGymData(data) {
   if (!data || typeof data !== "object") return data;
 
-  const clean = { ...data };
-
-  if (Array.isArray(clean.plans)) {
-    clean.plans = clean.plans.map(sanitizePlan);
-  }
-
-  return clean;
+  return Object.fromEntries(
+    Object.entries(data)
+      .filter(([key]) => !PDF_FIELDS.includes(key))
+      .map(([key, value]) => [key, sanitizeGymData(value)])
+  );
 }
 
 module.exports = sanitizeGymData;

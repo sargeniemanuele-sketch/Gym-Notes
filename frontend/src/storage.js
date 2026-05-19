@@ -7,6 +7,10 @@ export function createId() {
 }
 
 export function normalizeGymData(data) {
+  if (!data || typeof data !== "object") {
+    return emptyGymData();
+  }
+
   if (Array.isArray(data.plans)) {
     const plans = data.plans.filter(isObject).map(normalizePlan);
     const storedActivePlanId = typeof data.activePlanId === "string" ? data.activePlanId : null;
@@ -18,12 +22,31 @@ export function normalizeGymData(data) {
     };
   }
 
-  const migratedPlan = normalizePlan(data);
+  if (!isLegacyPlan(data)) {
+    return emptyGymData();
+  }
 
+  const migratedPlan = normalizePlan(data);
   return {
     activePlanId: migratedPlan.id,
     plans: [migratedPlan]
   };
+}
+
+function emptyGymData() {
+  return {
+    activePlanId: null,
+    plans: []
+  };
+}
+
+function isLegacyPlan(data) {
+  return (
+    typeof data.id === "string" &&
+    typeof data.name === "string" &&
+    typeof data.createdAt === "string" &&
+    Array.isArray(data.workouts)
+  );
 }
 
 function normalizePlan(data) {
