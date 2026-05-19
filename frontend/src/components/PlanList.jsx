@@ -14,8 +14,11 @@ function PlanList({
   onOpenNewPlanForm,
   onOpenPlan,
   onPlanNameChange,
+  onSyncNow,
   planName,
-  plans
+  plans,
+  saveStatus,
+  saveWarning
 }) {
   return (
     <main className={`app-shell${hasTimerBar ? " app-shell--with-bar" : ""}`}>
@@ -88,7 +91,13 @@ function PlanList({
           </>
         )}
 
-        <AccountCard auth={auth} onLogout={onLogout} />
+        <AccountCard
+          auth={auth}
+          onLogout={onLogout}
+          onSyncNow={onSyncNow}
+          saveStatus={saveStatus}
+          saveWarning={saveWarning}
+        />
       </section>
     </main>
   );

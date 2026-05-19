@@ -2,24 +2,37 @@ const BASE_URL =
   import.meta.env.VITE_API_BASE_URL ?? "https://gym-notes-backend.onrender.com";
 
 async function request(path, { method = "GET", token, body } = {}) {
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), 15000);
   const headers = { "Content-Type": "application/json" };
   if (token) headers["Authorization"] = `Bearer ${token}`;
 
-  const res = await fetch(`${BASE_URL}${path}`, {
-    method,
-    headers,
-    body: body !== undefined ? JSON.stringify(body) : undefined,
-  });
+  try {
+    const res = await fetch(`${BASE_URL}${path}`, {
+      method,
+      headers,
+      signal: controller.signal,
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+    });
 
-  const json = await res.json().catch(() => ({}));
+    const json = await res.json().catch(() => ({}));
 
-  if (!res.ok) {
-    const err = new Error(json.error ?? `Errore ${res.status}`);
-    err.status = res.status;
+    if (!res.ok) {
+      const err = new Error(json.error ?? `Errore ${res.status}`);
+      err.status = res.status;
+      throw err;
+    }
+
+    return json;
+  } catch (err) {
+    if (err.name === "AbortError") {
+      throw new Error("Cloud non disponibile. Riprova tra poco.");
+    }
+
     throw err;
+  } finally {
+    window.clearTimeout(timeoutId);
   }
-
-  return json;
 }
 
 export function register(email, password) {

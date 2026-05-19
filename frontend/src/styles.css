@@ -1822,6 +1822,24 @@ h3 {
   gap: 10px;
 }
 
+.account-actions button {
+  width: 100%;
+  min-height: 46px;
+  border: 0;
+  border-radius: 14px;
+  padding: 0 16px;
+  background: var(--ink);
+  color: #ffffff;
+  font-size: 0.94rem;
+  font-weight: 750;
+}
+
+.account-actions .text-danger-button {
+  border: 1px solid var(--red-soft);
+  background: var(--surface);
+  color: var(--red);
+}
+
 .account-error {
   margin: 0;
   border-radius: 12px;
@@ -1856,4 +1874,3 @@ h3 {
   font-size: 0.82rem;
   line-height: 1.5;
 }
-

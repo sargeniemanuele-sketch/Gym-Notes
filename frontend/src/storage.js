@@ -1,74 +1,3 @@
-export const STORAGE_KEY = "gym-notes-data-v1";
-
-export function isStorageAvailable() {
-  try {
-    const testKey = "__gym_notes_storage_test__";
-    window.localStorage.setItem(testKey, "1");
-    window.localStorage.removeItem(testKey);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-export function loadGymData() {
-  if (!isStorageAvailable()) {
-    return null;
-  }
-
-  try {
-    const savedData = window.localStorage.getItem(STORAGE_KEY);
-
-    if (!savedData) {
-      return null;
-    }
-
-    const parsedData = JSON.parse(savedData);
-
-    if (!isValidGymData(parsedData)) {
-      return null;
-    }
-
-    const normalizedData = normalizeGymData(parsedData);
-
-    try {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(normalizedData));
-    } catch {
-      // The app can still use the normalized data in memory if persisting the migration fails.
-    }
-
-    return normalizedData;
-  } catch {
-    return null;
-  }
-}
-
-export function saveGymData(data) {
-  if (!isStorageAvailable()) {
-    return false;
-  }
-
-  try {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-export function clearGymData() {
-  if (!isStorageAvailable()) {
-    return false;
-  }
-
-  try {
-    window.localStorage.removeItem(STORAGE_KEY);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 export function createId() {
   if (window.crypto && typeof window.crypto.randomUUID === "function") {
     return window.crypto.randomUUID();
@@ -77,24 +6,7 @@ export function createId() {
   return `${Date.now().toString()}-${Math.random().toString(16).slice(2)}`;
 }
 
-function isValidGymData(data) {
-  if (!data || typeof data !== "object") {
-    return false;
-  }
-
-  if (Array.isArray(data.plans)) {
-    return true;
-  }
-
-  return (
-    typeof data.id === "string" &&
-    typeof data.name === "string" &&
-    typeof data.createdAt === "string" &&
-    Array.isArray(data.workouts)
-  );
-}
-
-function normalizeGymData(data) {
+export function normalizeGymData(data) {
   if (Array.isArray(data.plans)) {
     const plans = data.plans.filter(isObject).map(normalizePlan);
     const storedActivePlanId = typeof data.activePlanId === "string" ? data.activePlanId : null;
