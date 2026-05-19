@@ -82,6 +82,7 @@ textarea:focus-visible,
 }
 
 .welcome-panel,
+.plans-panel,
 .screen-panel {
   width: 100%;
   max-width: 560px;
@@ -97,21 +98,101 @@ textarea:focus-visible,
   gap: 34px;
 }
 
-.brand-mark {
+.plans-panel {
   display: grid;
+  gap: 24px;
+  padding-top: 20px;
+}
+
+.brand-title-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.brand-title-row .brand-mark {
+  flex: 0 0 auto;
+  margin-bottom: 0;
+}
+
+.brand-title-row h1 {
+  font-size: 2.15rem;
+}
+
+.plans-empty {
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: 18px;
+  background: var(--surface);
+}
+
+.plans-empty h2 {
+  color: var(--ink);
+}
+
+.plan-list {
+  display: grid;
+  gap: 12px;
+}
+
+.plan-card {
+  display: grid;
+  gap: 16px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: 18px;
+  background: var(--surface);
+  color: var(--ink);
+}
+
+.plan-card h2 {
+  color: var(--ink);
+  font-size: 1.08rem;
+  letter-spacing: -0.01em;
+  text-transform: none;
+}
+
+.plan-card p {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 0.94rem;
+  font-weight: 650;
+  line-height: 1.45;
+}
+
+.plan-card-actions {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 10px;
+}
+
+.plan-card-actions button {
+  min-height: 50px;
+  border: 0;
+  border-radius: 14px;
+  padding: 0 18px;
+  background: var(--ink);
+  color: #ffffff;
+  font-size: 0.96rem;
+  font-weight: 700;
+}
+
+.plan-card-actions .text-danger-button {
+  border: 1px solid var(--red-soft);
+  background: var(--surface);
+  color: var(--red);
+}
+
+.plan-create-form {
+  margin-top: 0;
+}
+
+.brand-mark {
   width: 54px;
   height: 54px;
   margin-bottom: 28px;
-  place-items: center;
-  border: 1px solid var(--line);
-  border-radius: 16px;
-  background: var(--surface);
-  color: var(--accent);
-  font-family: var(--mono);
-  font-size: 0.95rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.7) inset;
+  object-fit: contain;
 }
 
 .eyebrow {
@@ -267,10 +348,42 @@ h3 {
   background: var(--ink);
 }
 
+.plan-new-button,
+.workout-new-button {
+  margin-top: 22px;
+  background: var(--accent);
+  box-shadow: 0 1px 0 rgba(164, 80, 47, 0.5) inset;
+}
+
+.plan-new-button {
+  margin-top: 0;
+}
+
 .ghost-button {
   border: 1px solid var(--line) !important;
   background: var(--surface) !important;
   color: var(--ink-2) !important;
+}
+
+.text-danger-button,
+.outline-danger-button {
+  width: fit-content;
+  min-height: 40px;
+  border: 1px solid var(--red-soft);
+  border-radius: 10px;
+  padding: 0 14px;
+  background: var(--surface);
+  color: var(--red);
+  font-size: 0.88rem;
+  font-weight: 750;
+}
+
+.outline-danger-button {
+  width: 100%;
+  min-height: 52px;
+  border-radius: 14px;
+  font-size: 0.98rem;
+  font-weight: 700;
 }
 
 .danger-button {
@@ -397,20 +510,25 @@ h3 {
 .workout-card {
   display: grid;
   width: 100%;
-  gap: 14px;
+  gap: 16px;
   padding: 18px;
   text-align: left;
 }
 
-.workout-card span {
+.workout-card h3 {
+  color: var(--ink);
   font-size: 1.08rem;
-  font-weight: 700;
+  font-weight: 720;
+  letter-spacing: -0.015em;
+  line-height: 1.25;
 }
 
-.workout-card small {
+.workout-card p {
+  margin: 8px 0 0;
   color: var(--muted);
-  font-family: var(--mono);
-  font-size: 0.75rem;
+  font-size: 0.92rem;
+  font-weight: 650;
+  line-height: 1.45;
 }
 
 .workout-card:focus,
@@ -419,23 +537,25 @@ h3 {
   outline: none;
 }
 
-.workout-edit-card {
-  cursor: pointer;
-}
-
 .workout-card-actions {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 10px;
 }
 
-.workout-card-actions .danger-button {
+.workout-card-actions .outline-danger-button,
+.workout-card-actions .ghost-button {
   margin-top: 0;
+}
+
+.workout-card-actions .outline-danger-button {
+  border: 1px solid var(--red-soft);
   background: var(--surface);
+  color: var(--red);
 }
 
 .workout-form {
-  margin-top: 28px;
+  margin-top: 18px;
 }
 
 .exercise-list {
@@ -477,16 +597,16 @@ h3 {
 .pdf-home-card,
 .pdf-reference-card {
   display: grid;
-  gap: 16px;
-  margin-top: 18px;
-  padding: 18px;
+  gap: 12px;
+  margin-top: 14px;
+  padding: 14px;
 }
 
 .pdf-home-card p,
 .pdf-reference-copy {
   margin: 0;
   color: var(--ink-2);
-  font-size: 0.96rem;
+  font-size: 0.92rem;
   font-weight: 650;
   line-height: 1.45;
 }
@@ -494,6 +614,14 @@ h3 {
 .pdf-actions {
   display: grid;
   gap: 10px;
+}
+
+.pdf-actions button {
+  min-height: 44px;
+  border: 1px solid var(--accent-soft);
+  background: var(--accent-soft);
+  color: var(--accent-ink);
+  font-size: 0.92rem;
 }
 
 .pdf-actions .danger-button {
@@ -814,6 +942,16 @@ h3 {
   font-weight: 750;
 }
 
+.plans-back-button {
+  margin-bottom: 10px;
+}
+
+.top-nav-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
 @media (min-width: 720px) {
   .app-shell {
     padding:
@@ -823,6 +961,10 @@ h3 {
 
   .welcome-panel {
     padding-top: 72px;
+  }
+
+  .plans-panel {
+    padding-top: 56px;
   }
 
   h1 {

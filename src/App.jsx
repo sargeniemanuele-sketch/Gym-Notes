@@ -140,10 +140,14 @@ function isPdfFile(file) {
 }
 
 function App() {
-  const [gymPlan, setGymPlan] = useState(() => loadGymData());
+  const [gymData, setGymData] = useState(() => loadGymData());
+  const [isPlanOpen, setIsPlanOpen] = useState(false);
+  const [isNewPlanFormOpen, setIsNewPlanFormOpen] = useState(false);
   const [selectedWorkoutId, setSelectedWorkoutId] = useState(null);
   const [planName, setPlanName] = useState("");
   const [workoutName, setWorkoutName] = useState("");
+  const [isNewWorkoutFormOpen, setIsNewWorkoutFormOpen] = useState(false);
+  const [editingWorkoutId, setEditingWorkoutId] = useState(null);
   const [isExerciseFormOpen, setIsExerciseFormOpen] = useState(false);
   const [exerciseDraft, setExerciseDraft] = useState(emptyExerciseDraft);
   const [exerciseError, setExerciseError] = useState("");
@@ -157,15 +161,20 @@ function App() {
   const pdfInputRef = useRef(null);
   const todayLabel = useMemo(() => getTodayLabel(), []);
   const storageAvailable = useMemo(() => isStorageAvailable(), []);
+  const plans = gymData?.plans ?? [];
+  const activePlan = useMemo(
+    () => plans.find((plan) => plan.id === gymData?.activePlanId) ?? null,
+    [gymData?.activePlanId, plans]
+  );
 
-  const selectedWorkout = gymPlan?.workouts.find((workout) => workout.id === selectedWorkoutId);
+  const selectedWorkout = activePlan?.workouts.find((workout) => workout.id === selectedWorkoutId);
   const selectedWorkoutExercises = selectedWorkout?.exercises ?? [];
 
   useEffect(() => {
-    if (selectedWorkoutId && gymPlan?.pdfId) {
+    if (selectedWorkoutId && activePlan?.pdfId) {
       setIsPdfVisible(true);
     }
-  }, [gymPlan?.pdfId, selectedWorkoutId]);
+  }, [activePlan?.pdfId, selectedWorkoutId]);
 
   useEffect(() => {
     if (activeTimer?.status !== "running") {
@@ -211,12 +220,24 @@ function App() {
     notifyTimerFinished();
   }, [activeTimer?.exerciseId, activeTimer?.status]);
 
-  function persistNextPlan(nextPlan) {
-    setGymPlan(nextPlan);
-    const saved = saveGymData(nextPlan);
+  function persistNextData(nextData) {
+    setGymData(nextData);
+    const saved = saveGymData(nextData);
     setSaveWarning(
       saved ? "" : "Il salvataggio locale non è disponibile su questo browser. I dati potrebbero non essere mantenuti."
     );
+  }
+
+  function persistNextActivePlan(nextPlan) {
+    if (!gymData) {
+      return;
+    }
+
+    persistNextData({
+      ...gymData,
+      activePlanId: nextPlan.id,
+      plans: gymData.plans.map((plan) => (plan.id === nextPlan.id ? nextPlan : plan))
+    });
   }
 
   function showSavedStatus(message = "Salvato automaticamente") {
@@ -293,22 +314,111 @@ function App() {
       return;
     }
 
+    const now = new Date().toISOString();
     const nextPlan = {
       id: createId(),
       name: trimmedName,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
+      createdAt: now,
+      updatedAt: now,
       workouts: []
     };
+    const nextData = {
+      activePlanId: nextPlan.id,
+      plans: [...plans, nextPlan]
+    };
 
-    persistNextPlan(nextPlan);
+    persistNextData(nextData);
+    setIsPlanOpen(true);
+    setIsNewPlanFormOpen(false);
+    setSelectedWorkoutId(null);
+    setActiveTimer(null);
     setPlanName("");
+  }
+
+  function handleOpenPlan(planId) {
+    const nextData = {
+      activePlanId: planId,
+      plans
+    };
+
+    persistNextData(nextData);
+    setIsPlanOpen(true);
+    setIsNewPlanFormOpen(false);
+    setSelectedWorkoutId(null);
+    setActiveTimer(null);
+    setIsNewWorkoutFormOpen(false);
+    setEditingWorkoutId(null);
+    setIsExerciseFormOpen(false);
+    setExerciseDraft(emptyExerciseDraft);
+    setExerciseError("");
+    setPdfError("");
+  }
+
+  async function handleDeletePlan(planId) {
+    const planToDelete = plans.find((plan) => plan.id === planId);
+
+    if (!planToDelete) {
+      return;
+    }
+
+    const confirmed = window.confirm("Vuoi eliminare questa scheda e tutti i suoi dati?");
+
+    if (!confirmed) {
+      return;
+    }
+
+    let deleteWarning = "";
+
+    if (planToDelete.pdfId) {
+      try {
+        await deletePdfFile(planToDelete.pdfId);
+      } catch {
+        deleteWarning = "La scheda è stata eliminata, ma non è stato possibile rimuovere il PDF da IndexedDB.";
+      }
+    }
+
+    const nextPlans = plans.filter((plan) => plan.id !== planId);
+    const nextActivePlanId =
+      gymData?.activePlanId === planId ? nextPlans[0]?.id ?? null : gymData?.activePlanId ?? nextPlans[0]?.id ?? null;
+
+    persistNextData({
+      activePlanId: nextActivePlanId,
+      plans: nextPlans
+    });
+
+    if (activePlan?.id === planId) {
+      setIsPlanOpen(false);
+      setSelectedWorkoutId(null);
+      setActiveTimer(null);
+      setIsNewWorkoutFormOpen(false);
+      setEditingWorkoutId(null);
+    }
+
+    setSaveWarning(deleteWarning);
+    showSavedStatus("Scheda eliminata");
+  }
+
+  function handleBackToPlans() {
+    setIsPlanOpen(false);
+    setSelectedWorkoutId(null);
+    setActiveTimer(null);
+    setIsNewWorkoutFormOpen(false);
+    setEditingWorkoutId(null);
+    setIsExerciseFormOpen(false);
+    setExerciseDraft(emptyExerciseDraft);
+    setExerciseError("");
+    setPdfError("");
+  }
+
+  function handleCancelCreatePlan() {
+    setPlanName("");
+    setIsNewPlanFormOpen(false);
   }
 
   function handleCreateWorkout(event) {
     event.preventDefault();
 
-    if (!gymPlan) {
+    if (!activePlan) {
       return;
     }
 
@@ -328,43 +438,49 @@ function App() {
     };
 
     const nextPlan = {
-      ...gymPlan,
+      ...activePlan,
       updatedAt: new Date().toISOString(),
-      workouts: [...gymPlan.workouts, nextWorkout]
+      workouts: [...activePlan.workouts, nextWorkout]
     };
 
-    persistNextPlan(nextPlan);
+    persistNextActivePlan(nextPlan);
     setWorkoutName("");
+    setIsNewWorkoutFormOpen(false);
     showSavedStatus("Allenamento creato");
   }
 
+  function handleCancelCreateWorkout() {
+    setWorkoutName("");
+    setIsNewWorkoutFormOpen(false);
+  }
+
   function handlePlanNameChange(value) {
-    if (!gymPlan) {
+    if (!activePlan) {
       return;
     }
 
     const nextPlan = {
-      ...gymPlan,
+      ...activePlan,
       name: value,
       updatedAt: new Date().toISOString()
     };
 
-    persistNextPlan(nextPlan);
+    persistNextActivePlan(nextPlan);
     showSavedStatus();
   }
 
   function handleWorkoutNameChange(workoutId, value) {
-    if (!gymPlan) {
+    if (!activePlan) {
       return;
     }
 
-    const nextPlan = updateWorkoutInPlan(gymPlan, workoutId, (workout) => ({
+    const nextPlan = updateWorkoutInPlan(activePlan, workoutId, (workout) => ({
       ...workout,
       name: value,
       updatedAt: new Date().toISOString()
     }));
 
-    persistNextPlan({
+    persistNextActivePlan({
       ...nextPlan,
       updatedAt: new Date().toISOString()
     });
@@ -372,7 +488,7 @@ function App() {
   }
 
   function handleDeleteWorkout(workoutId) {
-    if (!gymPlan) {
+    if (!activePlan) {
       return;
     }
 
@@ -383,41 +499,50 @@ function App() {
     }
 
     const nextPlan = {
-      ...gymPlan,
+      ...activePlan,
       updatedAt: new Date().toISOString(),
-      workouts: gymPlan.workouts.filter((workout) => workout.id !== workoutId)
+      workouts: activePlan.workouts.filter((workout) => workout.id !== workoutId)
     };
 
     if (selectedWorkoutId === workoutId) {
       setSelectedWorkoutId(null);
     }
 
-    persistNextPlan(nextPlan);
+    if (editingWorkoutId === workoutId) {
+      setEditingWorkoutId(null);
+    }
+
+    persistNextActivePlan(nextPlan);
     showSavedStatus("Allenamento eliminato");
   }
 
   async function handleResetData() {
-    const confirmed = window.confirm("Vuoi cancellare tutti i dati salvati su questo dispositivo?");
+    const confirmed = window.confirm("Vuoi cancellare tutte le schede e tutti i dati salvati su questo dispositivo?");
 
     if (!confirmed) {
       return;
     }
 
     let resetWarning = "";
+    const pdfIds = [...new Set(plans.map((plan) => plan.pdfId).filter(Boolean))];
 
-    if (gymPlan?.pdfId) {
+    if (pdfIds.length > 0) {
       try {
-        await deletePdfFile(gymPlan.pdfId);
+        await Promise.all(pdfIds.map((pdfId) => deletePdfFile(pdfId)));
       } catch {
-        resetWarning = "I dati sono stati cancellati, ma non è stato possibile rimuovere il PDF da IndexedDB.";
+        resetWarning = "I dati sono stati cancellati, ma non è stato possibile rimuovere tutti i PDF da IndexedDB.";
       }
     }
 
     clearGymData();
-    setGymPlan(null);
+    setGymData(null);
+    setIsPlanOpen(false);
+    setIsNewPlanFormOpen(false);
     setSelectedWorkoutId(null);
     setPlanName("");
     setWorkoutName("");
+    setIsNewWorkoutFormOpen(false);
+    setEditingWorkoutId(null);
     setIsExerciseFormOpen(false);
     setExerciseDraft(emptyExerciseDraft);
     setExerciseError("");
@@ -428,7 +553,7 @@ function App() {
   }
 
   async function handlePdfFileChange(event) {
-    if (!gymPlan) {
+    if (!activePlan) {
       return;
     }
 
@@ -451,16 +576,16 @@ function App() {
     try {
       await savePdfFile(pdfId, file);
 
-      if (gymPlan.pdfId) {
+      if (activePlan.pdfId) {
         try {
-          await deletePdfFile(gymPlan.pdfId);
+          await deletePdfFile(activePlan.pdfId);
         } catch {
           // The plan will point to the new PDF, so an old orphan can be ignored.
         }
       }
 
       const nextPlan = {
-        ...gymPlan,
+        ...activePlan,
         pdfId,
         pdfName: file.name,
         pdfSize: file.size,
@@ -468,7 +593,7 @@ function App() {
         updatedAt: pdfUpdatedAt
       };
 
-      persistNextPlan(nextPlan);
+      persistNextActivePlan(nextPlan);
       showSavedStatus("PDF salvato sul dispositivo");
     } catch {
       setPdfError("Non è stato possibile salvare il PDF su questo dispositivo.");
@@ -476,7 +601,7 @@ function App() {
   }
 
   async function handleRemovePdf() {
-    if (!gymPlan?.pdfId) {
+    if (!activePlan?.pdfId) {
       return;
     }
 
@@ -487,38 +612,38 @@ function App() {
     }
 
     try {
-      await deletePdfFile(gymPlan.pdfId);
+      await deletePdfFile(activePlan.pdfId);
     } catch {
       setPdfError("Non è stato possibile rimuovere il PDF da IndexedDB.");
       return;
     }
 
-    const { pdfId, pdfName, pdfSize, pdfUpdatedAt, ...planWithoutPdf } = gymPlan;
+    const { pdfId, pdfName, pdfSize, pdfUpdatedAt, ...planWithoutPdf } = activePlan;
     const nextPlan = {
       ...planWithoutPdf,
       updatedAt: new Date().toISOString()
     };
 
-    persistNextPlan(nextPlan);
+    persistNextActivePlan(nextPlan);
     setIsPdfVisible(false);
     showSavedStatus("PDF rimosso");
   }
 
   function handleWorkoutPdfPageChange(workoutId, value) {
-    if (!gymPlan) {
+    if (!activePlan) {
       return;
     }
 
     const parsedPage = typeof value === "number" ? value : Number.parseInt(value, 10);
     const pdfPage = Number.isFinite(parsedPage) && parsedPage >= 1 ? parsedPage : null;
     const now = new Date().toISOString();
-    const nextPlan = updateWorkoutInPlan(gymPlan, workoutId, (workout) => ({
+    const nextPlan = updateWorkoutInPlan(activePlan, workoutId, (workout) => ({
       ...workout,
       pdfPage,
       updatedAt: now
     }));
 
-    persistNextPlan({
+    persistNextActivePlan({
       ...nextPlan,
       updatedAt: now
     });
@@ -539,7 +664,7 @@ function App() {
   function handleAddExercise(event) {
     event.preventDefault();
 
-    if (!gymPlan || !selectedWorkout) {
+    if (!activePlan || !selectedWorkout) {
       return;
     }
 
@@ -563,12 +688,12 @@ function App() {
       updatedAt: now
     };
 
-    const nextPlan = updateWorkoutInPlan(gymPlan, selectedWorkout.id, (workout) => ({
+    const nextPlan = updateWorkoutInPlan(activePlan, selectedWorkout.id, (workout) => ({
       ...workout,
       exercises: [...workout.exercises, nextExercise]
     }));
 
-    persistNextPlan(nextPlan);
+    persistNextActivePlan(nextPlan);
     showSavedStatus("Esercizio salvato");
     setExerciseDraft(emptyExerciseDraft);
     setExerciseError("");
@@ -582,11 +707,11 @@ function App() {
   }
 
   function handleUpdateExercise(exerciseId, field, value) {
-    if (!gymPlan || !selectedWorkout) {
+    if (!activePlan || !selectedWorkout) {
       return;
     }
 
-    const nextPlan = updateWorkoutInPlan(gymPlan, selectedWorkout.id, (workout) => ({
+    const nextPlan = updateWorkoutInPlan(activePlan, selectedWorkout.id, (workout) => ({
       ...workout,
       exercises: workout.exercises.map((exercise) => {
         if (exercise.id !== exerciseId) {
@@ -601,12 +726,12 @@ function App() {
       })
     }));
 
-    persistNextPlan(nextPlan);
+    persistNextActivePlan(nextPlan);
     showSavedStatus();
   }
 
   function handleDeleteExercise(exerciseId) {
-    if (!gymPlan || !selectedWorkout) {
+    if (!activePlan || !selectedWorkout) {
       return;
     }
 
@@ -616,37 +741,80 @@ function App() {
       return;
     }
 
-    const nextPlan = updateWorkoutInPlan(gymPlan, selectedWorkout.id, (workout) => ({
+    const nextPlan = updateWorkoutInPlan(activePlan, selectedWorkout.id, (workout) => ({
       ...workout,
       exercises: workout.exercises.filter((exercise) => exercise.id !== exerciseId)
     }));
 
-    persistNextPlan(nextPlan);
+    persistNextActivePlan(nextPlan);
     showSavedStatus("Esercizio eliminato");
   }
 
-  if (!gymPlan) {
+  if (!isPlanOpen || !activePlan) {
     return (
       <main className="app-shell">
-        <section className="welcome-panel" aria-labelledby="app-title">
-          <div className="brand-mark" aria-hidden="true">GN</div>
-          <p className="eyebrow">Scheda locale sul tuo dispositivo</p>
-          <h1 id="app-title">Gym Notes</h1>
-          <p className="subtitle">La tua scheda palestra semplice, veloce e sempre con te.</p>
-          <p className="intro">Crea la tua scheda e segnati esercizi, serie, ripetizioni, carichi e note.</p>
+        <section className="plans-panel" aria-labelledby="app-title">
+          <header className="plans-header">
+            <div className="brand-title-row">
+              <img className="brand-mark" src="/icons/icon-192.png" alt="" aria-hidden="true" />
+              <h1 id="app-title">Gym Notes</h1>
+            </div>
+            <p className="subtitle">Le tue schede</p>
+          </header>
 
-          <form className="form-stack" onSubmit={handleCreatePlan}>
-            <label htmlFor="plan-name">Nome scheda</label>
-            <input
-              id="plan-name"
-              type="text"
-              value={planName}
-              onChange={(event) => setPlanName(event.target.value)}
-              placeholder="Es. Scheda massa"
-              autoComplete="off"
-            />
-            <button type="submit">Crea scheda</button>
-          </form>
+          {plans.length === 0 ? (
+            <>
+              <div className="plans-empty">
+                <h2>Nessuna scheda creata</h2>
+                <p className="empty-state">Crea la tua prima scheda palestra.</p>
+              </div>
+
+              <form className="form-stack plan-create-form" onSubmit={handleCreatePlan}>
+                <label htmlFor="plan-name">Nome scheda</label>
+                <input
+                  id="plan-name"
+                  type="text"
+                  value={planName}
+                  onChange={(event) => setPlanName(event.target.value)}
+                  placeholder="Es. Scheda massa"
+                  autoComplete="off"
+                />
+                <button type="submit">Crea scheda</button>
+              </form>
+            </>
+          ) : (
+            <>
+              <div className="plan-list" aria-label="Le tue schede">
+                {plans.map((plan) => (
+                  <PlanCard key={plan.id} onDelete={handleDeletePlan} onOpen={handleOpenPlan} plan={plan} />
+                ))}
+              </div>
+
+              {isNewPlanFormOpen ? (
+                <form className="form-stack plan-create-form" onSubmit={handleCreatePlan}>
+                  <label htmlFor="plan-name">Nome scheda</label>
+                  <input
+                    id="plan-name"
+                    type="text"
+                    value={planName}
+                    onChange={(event) => setPlanName(event.target.value)}
+                    placeholder="Es. Scheda massa"
+                    autoComplete="off"
+                  />
+                  <div className="form-actions">
+                    <button type="submit">Crea scheda</button>
+                    <button className="ghost-button" type="button" onClick={handleCancelCreatePlan}>
+                      Annulla
+                    </button>
+                  </div>
+                </form>
+              ) : (
+                <button className="secondary-action plan-new-button" type="button" onClick={() => setIsNewPlanFormOpen(true)}>
+                  + Nuova scheda
+                </button>
+              )}
+            </>
+          )}
 
           {!storageAvailable && (
             <p className="warning">
@@ -663,9 +831,14 @@ function App() {
     return (
       <main className="app-shell">
         <section className="screen-panel">
-          <button className="back-button" type="button" onClick={() => setSelectedWorkoutId(null)}>
-            ← Torna
-          </button>
+          <div className="top-nav-row">
+            <button className="back-button" type="button" onClick={() => setSelectedWorkoutId(null)}>
+              ← Torna
+            </button>
+            <button className="back-button" type="button" onClick={handleBackToPlans}>
+              ← Le tue schede
+            </button>
+          </div>
 
           <header className="page-header">
             <p className="eyebrow">Oggi: {todayLabel}</p>
@@ -681,7 +854,7 @@ function App() {
             />
           </header>
 
-          {gymPlan.pdfId && (
+          {activePlan.pdfId && (
             <section className="content-section" aria-labelledby="pdf-reference-title">
               <div className="section-title-row">
                 <h2 id="pdf-reference-title">Riferimento PDF</h2>
@@ -693,8 +866,8 @@ function App() {
                 onHide={() => setIsPdfVisible(false)}
                 onPageChange={(pageNumber) => handleWorkoutPdfPageChange(selectedWorkout.id, pageNumber)}
                 onShow={() => setIsPdfVisible(true)}
-                pdfId={gymPlan.pdfId}
-                pdfName={gymPlan.pdfName}
+                pdfId={activePlan.pdfId}
+                pdfName={activePlan.pdfName}
                 selectedPage={selectedWorkout.pdfPage}
               />
             </section>
@@ -748,6 +921,10 @@ function App() {
   return (
     <main className="app-shell">
       <section className="screen-panel">
+        <button className="back-button plans-back-button" type="button" onClick={handleBackToPlans}>
+          ← Le tue schede
+        </button>
+
         <header className="page-header">
           <p className="eyebrow">Oggi: {todayLabel}</p>
           <h1>Gym Notes</h1>
@@ -756,7 +933,7 @@ function App() {
             className="plan-name-input"
             id="plan-name-edit"
             type="text"
-            value={gymPlan.name}
+            value={activePlan.name}
             onChange={(event) => handlePlanNameChange(event.target.value)}
             placeholder="Nome scheda"
             autoComplete="off"
@@ -770,8 +947,8 @@ function App() {
           </div>
 
           <div className="pdf-home-card">
-            {gymPlan.pdfId ? (
-              <p>PDF caricato: {gymPlan.pdfName}</p>
+            {activePlan.pdfId ? (
+              <p>PDF caricato: {activePlan.pdfName}</p>
             ) : (
               <p>Nessun PDF caricato</p>
             )}
@@ -786,9 +963,9 @@ function App() {
 
             <div className="pdf-actions">
               <button type="button" onClick={() => pdfInputRef.current?.click()}>
-                {gymPlan.pdfId ? "Sostituisci PDF" : "Carica PDF"}
+                {activePlan.pdfId ? "Sostituisci PDF" : "Carica PDF"}
               </button>
-              {gymPlan.pdfId && (
+              {activePlan.pdfId && (
                 <button className="danger-button" type="button" onClick={handleRemovePdf}>
                   Rimuovi PDF
                 </button>
@@ -805,41 +982,50 @@ function App() {
             {saveStatus && <span className="save-status">{saveStatus}</span>}
           </div>
 
-          {gymPlan.workouts.length === 0 ? (
+          {activePlan.workouts.length === 0 ? (
             <p className="empty-state">Non hai ancora creato allenamenti.</p>
           ) : (
             <div className="card-list">
-              {gymPlan.workouts.map((workout) => (
+              {activePlan.workouts.map((workout) => (
                 <WorkoutCard
+                  editingWorkoutId={editingWorkoutId}
                   key={workout.id}
                   onDelete={handleDeleteWorkout}
+                  onFinishRename={() => setEditingWorkoutId(null)}
                   onOpen={setSelectedWorkoutId}
                   onRename={handleWorkoutNameChange}
+                  onStartRename={setEditingWorkoutId}
                   workout={workout}
                 />
               ))}
             </div>
           )}
 
-          <form className="form-stack workout-form" onSubmit={handleCreateWorkout}>
-            <label htmlFor="workout-name">Nome allenamento</label>
-            <input
-              id="workout-name"
-              type="text"
-              value={workoutName}
-              onChange={(event) => setWorkoutName(event.target.value)}
-              placeholder="Es. Petto e tricipiti"
-              autoComplete="off"
-            />
-            <button type="submit">+ Nuovo allenamento</button>
-          </form>
+          {isNewWorkoutFormOpen ? (
+            <form className="form-stack workout-form" onSubmit={handleCreateWorkout}>
+              <label htmlFor="workout-name">Nome allenamento</label>
+              <input
+                id="workout-name"
+                type="text"
+                value={workoutName}
+                onChange={(event) => setWorkoutName(event.target.value)}
+                placeholder="Es. Petto e tricipiti"
+                autoComplete="off"
+              />
+              <div className="form-actions">
+                <button type="submit">Crea allenamento</button>
+                <button className="ghost-button" type="button" onClick={handleCancelCreateWorkout}>
+                  Annulla
+                </button>
+              </div>
+            </form>
+          ) : (
+            <button className="secondary-action workout-new-button" type="button" onClick={() => setIsNewWorkoutFormOpen(true)}>
+              + Nuovo allenamento
+            </button>
+          )}
 
           {saveWarning && <p className="warning">{saveWarning}</p>}
-
-          <section className="install-hint" aria-labelledby="install-title">
-            <h2 id="install-title">Vuoi usarla come app?</h2>
-            <p>Su iPhone apri Safari, tocca Condividi e poi Aggiungi alla schermata Home.</p>
-          </section>
 
           <button className="reset-button" type="button" onClick={handleResetData}>
             Reset dati
@@ -863,59 +1049,81 @@ function updateWorkoutInPlan(gymPlan, workoutId, updateWorkout) {
   };
 }
 
-function WorkoutCard({ onDelete, onOpen, onRename, workout }) {
-  function stopCardClick(event) {
-    event.stopPropagation();
-  }
-
-  function handleCardKeyDown(event) {
-    if (event.target !== event.currentTarget) {
-      return;
-    }
-
-    if (event.key === "Enter" || event.key === " ") {
-      event.preventDefault();
-      onOpen(workout.id);
-    }
-  }
+function PlanCard({ onDelete, onOpen, plan }) {
+  const workoutCount = plan.workouts.length;
+  const workoutLabel = workoutCount === 1 ? "1 allenamento" : `${workoutCount} allenamenti`;
+  const pdfLabel = plan.pdfId ? "PDF caricato" : "Nessun PDF";
 
   return (
-    <article
-      className="workout-card workout-edit-card"
-      onClick={() => onOpen(workout.id)}
-      onKeyDown={handleCardKeyDown}
-      role="button"
-      tabIndex="0"
-    >
-      <div className="field-stack" onClick={stopCardClick}>
-        <label htmlFor={`workout-${workout.id}-name`}>Nome allenamento</label>
-        <input
-          id={`workout-${workout.id}-name`}
-          type="text"
-          value={workout.name}
-          onChange={(event) => onRename(workout.id, event.target.value)}
-          onClick={stopCardClick}
-          placeholder="Nome allenamento"
-          autoComplete="off"
-        />
+    <article className="plan-card">
+      <div>
+        <h2>{plan.name || "Scheda senza nome"}</h2>
+        <p>{workoutLabel} · {pdfLabel}</p>
       </div>
 
-      <small>Creato il {todayFormatter.format(new Date(workout.createdAt))}</small>
-
-      <div className="workout-card-actions">
-        <button type="button" onClick={() => onOpen(workout.id)}>
+      <div className="plan-card-actions">
+        <button type="button" onClick={() => onOpen(plan.id)}>
           Apri
         </button>
-        <button
-          className="danger-button"
-          type="button"
-          onClick={(event) => {
-            event.stopPropagation();
-            onDelete(workout.id);
-          }}
-        >
+        <button className="text-danger-button" type="button" onClick={() => onDelete(plan.id)}>
           Elimina
         </button>
+      </div>
+    </article>
+  );
+}
+
+function WorkoutCard({ editingWorkoutId, onDelete, onFinishRename, onOpen, onRename, onStartRename, workout }) {
+  const isRenaming = editingWorkoutId === workout.id;
+  const exerciseCount = workout.exercises.length;
+  const exerciseLabel = exerciseCount === 1 ? "1 esercizio" : `${exerciseCount} esercizi`;
+  const workoutName = workout.name?.trim() || "Allenamento senza nome";
+
+  return (
+    <article className="workout-card">
+      {isRenaming ? (
+        <div className="field-stack">
+          <label htmlFor={`workout-${workout.id}-name`}>Nome allenamento</label>
+          <input
+            id={`workout-${workout.id}-name`}
+            type="text"
+            value={workout.name}
+            onChange={(event) => onRename(workout.id, event.target.value)}
+            placeholder="Nome allenamento"
+            autoComplete="off"
+          />
+        </div>
+      ) : (
+        <div>
+          <h3>{workoutName}</h3>
+          <p>{exerciseLabel} · Creato il {todayFormatter.format(new Date(workout.createdAt))}</p>
+        </div>
+      )}
+
+      <div className="workout-card-actions">
+        {isRenaming ? (
+          <>
+            <button
+              className="outline-danger-button"
+              type="button"
+              onClick={() => onDelete(workout.id)}
+            >
+              Elimina
+            </button>
+            <button className="ghost-button" type="button" onClick={onFinishRename}>
+              salva
+            </button>
+          </>
+        ) : (
+          <>
+            <button type="button" onClick={() => onOpen(workout.id)}>
+              Apri
+            </button>
+            <button className="ghost-button" type="button" onClick={() => onStartRename(workout.id)}>
+              Modifica
+            </button>
+          </>
+        )}
       </div>
     </article>
   );

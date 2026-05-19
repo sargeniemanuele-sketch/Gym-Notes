@@ -29,7 +29,15 @@ export function loadGymData() {
       return null;
     }
 
-    return normalizeGymData(parsedData);
+    const normalizedData = normalizeGymData(parsedData);
+
+    try {
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(normalizedData));
+    } catch {
+      // The app can still use the normalized data in memory if persisting the migration fails.
+    }
+
+    return normalizedData;
   } catch {
     return null;
   }
@@ -70,9 +78,15 @@ export function createId() {
 }
 
 function isValidGymData(data) {
+  if (!data || typeof data !== "object") {
+    return false;
+  }
+
+  if (Array.isArray(data.plans)) {
+    return true;
+  }
+
   return (
-    data &&
-    typeof data === "object" &&
     typeof data.id === "string" &&
     typeof data.name === "string" &&
     typeof data.createdAt === "string" &&
@@ -81,11 +95,31 @@ function isValidGymData(data) {
 }
 
 function normalizeGymData(data) {
-  const planCreatedAt = data.createdAt;
+  if (Array.isArray(data.plans)) {
+    const plans = data.plans.filter(isObject).map(normalizePlan);
+    const storedActivePlanId = typeof data.activePlanId === "string" ? data.activePlanId : null;
+    const activePlanExists = plans.some((plan) => plan.id === storedActivePlanId);
+
+    return {
+      activePlanId: activePlanExists ? storedActivePlanId : plans[0]?.id ?? null,
+      plans
+    };
+  }
+
+  const migratedPlan = normalizePlan(data);
 
   return {
-    id: data.id,
-    name: data.name,
+    activePlanId: migratedPlan.id,
+    plans: [migratedPlan]
+  };
+}
+
+function normalizePlan(data) {
+  const planCreatedAt = typeof data.createdAt === "string" ? data.createdAt : new Date().toISOString();
+
+  return {
+    id: typeof data.id === "string" ? data.id : createId(),
+    name: typeof data.name === "string" ? data.name : "Scheda",
     createdAt: planCreatedAt,
     updatedAt: typeof data.updatedAt === "string" ? data.updatedAt : planCreatedAt,
     pdfId: typeof data.pdfId === "string" ? data.pdfId : undefined,
