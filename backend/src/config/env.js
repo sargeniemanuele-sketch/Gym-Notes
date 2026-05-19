@@ -15,7 +15,7 @@ module.exports = {
   mongodbUri: process.env.MONGODB_URI,
   jwtSecret: process.env.JWT_SECRET,
   jwtExpiresIn: process.env.JWT_EXPIRES_IN ?? "7d",
-  allowedOrigins: (process.env.ALLOWED_ORIGINS ?? "http://localhost:5173")
+  allowedOrigins: (process.env.ALLOWED_ORIGINS ?? "http://localhost:5173,https://gym-notes-teal.vercel.app")
     .split(",")
     .map((o) => o.trim()),
 };

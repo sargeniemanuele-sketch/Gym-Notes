@@ -10,7 +10,7 @@ import { clearGymData, createId, isStorageAvailable, loadGymData, saveGymData } 
 import { getTodayLabel } from "./utils/formatters.js";
 import { normalizeNumericInputValue } from "./utils/numbers.js";
 import { clearAuth, loadAuth, saveAuth } from "./authStorage.js";
-import { login as apiLogin, register as apiRegister, getRemoteGymData, saveRemoteGymData } from "./api/client.js";
+import { login as apiLogin, register as apiRegister, getMe, getRemoteGymData, saveRemoteGymData } from "./api/client.js";
 import { sanitizeForCloud } from "./utils/sanitizeForCloud.js";
 import AuthScreen from "./components/AuthScreen.jsx";
 
@@ -63,6 +63,17 @@ function App() {
   );
 
   const selectedWorkout = activePlan?.workouts.find((workout) => workout.id === selectedWorkoutId);
+
+  useEffect(() => {
+    if (!auth) return;
+    getMe(auth.token).catch((err) => {
+      if (err.status === 401) {
+        clearAuth();
+        setAuth(null);
+      }
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     if (selectedWorkoutId && activePlan?.pdfId) {
@@ -189,6 +200,7 @@ function App() {
       await saveRemoteGymData(auth.token, sanitizeForCloud(dataToSync));
       showCloudStatus("Dati sincronizzati ✓");
     } catch (err) {
+      if (err.status === 401) { handleLogout(); return; }
       showCloudStatus(err.message ?? "Errore di sincronizzazione.", true);
     }
   }
@@ -209,6 +221,7 @@ function App() {
       setGymData(loadGymData());
       showCloudStatus("Dati cloud caricati ✓");
     } catch (err) {
+      if (err.status === 401) { handleLogout(); return; }
       showCloudStatus(err.message ?? "Errore durante il download.", true);
     }
   }
