@@ -9,6 +9,9 @@ import { deletePdfFile, savePdfFile } from "./pdfStorage.js";
 import { clearGymData, createId, isStorageAvailable, loadGymData, saveGymData } from "./storage.js";
 import { getTodayLabel } from "./utils/formatters.js";
 import { normalizeNumericInputValue } from "./utils/numbers.js";
+import { clearAuth, loadAuth, saveAuth } from "./authStorage.js";
+import { login as apiLogin, register as apiRegister, getRemoteGymData, saveRemoteGymData } from "./api/client.js";
+import { sanitizeForCloud } from "./utils/sanitizeForCloud.js";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 
@@ -43,8 +46,11 @@ function App() {
   const [activeTimer, setActiveTimer] = useState(null);
   const [activeSession, setActiveSession] = useState(null);
   const [sessionFeedback, setSessionFeedback] = useState("");
+  const [auth, setAuth] = useState(() => loadAuth());
+  const [cloudStatus, setCloudStatus] = useState(null);
   const saveStatusTimeoutRef = useRef(null);
   const sessionFeedbackTimeoutRef = useRef(null);
+  const cloudStatusTimeoutRef = useRef(null);
   const notifiedTimerRef = useRef(null);
   const pdfInputRef = useRef(null);
   const todayLabel = useMemo(() => getTodayLabel(), []);
@@ -149,6 +155,61 @@ function App() {
     sessionFeedbackTimeoutRef.current = window.setTimeout(() => {
       setSessionFeedback("");
     }, 3000);
+  }
+
+  function showCloudStatus(message, isError = false) {
+    setCloudStatus({ message, isError });
+    if (cloudStatusTimeoutRef.current) window.clearTimeout(cloudStatusTimeoutRef.current);
+    cloudStatusTimeoutRef.current = window.setTimeout(() => setCloudStatus(null), 4500);
+  }
+
+  async function handleLogin(email, password) {
+    const result = await apiLogin(email, password);
+    saveAuth(result);
+    setAuth(result);
+  }
+
+  async function handleRegister(email, password) {
+    const result = await apiRegister(email, password);
+    saveAuth(result);
+    setAuth(result);
+  }
+
+  function handleLogout() {
+    clearAuth();
+    setAuth(null);
+    setCloudStatus(null);
+  }
+
+  async function handleUploadToCloud() {
+    if (!auth) return;
+    const dataToSync = gymData ?? { activePlanId: null, plans: [] };
+    try {
+      await saveRemoteGymData(auth.token, sanitizeForCloud(dataToSync));
+      showCloudStatus("Dati sincronizzati ✓");
+    } catch (err) {
+      showCloudStatus(err.message ?? "Errore di sincronizzazione.", true);
+    }
+  }
+
+  async function handleDownloadFromCloud() {
+    if (!auth) return;
+    const confirmed = window.confirm(
+      "Vuoi sostituire i dati locali con quelli salvati nel cloud?\n\n⚠ I PDF restano solo su questo dispositivo: se hai collegato un PDF a una scheda, il collegamento non verrà ripristinato."
+    );
+    if (!confirmed) return;
+    try {
+      const result = await getRemoteGymData(auth.token);
+      if (!result.data) {
+        showCloudStatus("Nessun dato cloud disponibile.");
+        return;
+      }
+      saveGymData(result.data);
+      setGymData(loadGymData());
+      showCloudStatus("Dati cloud caricati ✓");
+    } catch (err) {
+      showCloudStatus(err.message ?? "Errore durante il download.", true);
+    }
   }
 
   function handleStartSession(workoutId) {
@@ -914,15 +975,22 @@ function App() {
     return (
       <>
         <PlanList
+          auth={auth}
+          cloudStatus={cloudStatus}
           hasTimerBar={!!activeTimer}
           isNewPlanFormOpen={isNewPlanFormOpen}
           onCancelCreatePlan={handleCancelCreatePlan}
           onCreatePlan={handleCreatePlan}
           onDeletePlan={handleDeletePlan}
+          onDownloadFromCloud={handleDownloadFromCloud}
           onDuplicatePlan={handleDuplicatePlan}
+          onLogin={handleLogin}
+          onLogout={handleLogout}
           onOpenNewPlanForm={() => setIsNewPlanFormOpen(true)}
           onOpenPlan={handleOpenPlan}
           onPlanNameChange={setPlanName}
+          onRegister={handleRegister}
+          onUploadToCloud={handleUploadToCloud}
           planName={planName}
           plans={plans}
           saveWarning={saveWarning}

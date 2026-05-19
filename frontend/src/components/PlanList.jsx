@@ -1,16 +1,24 @@
 import React from "react";
+import AccountCard from "./AccountCard.jsx";
 import PlanCard from "./PlanCard.jsx";
 
 function PlanList({
+  auth,
+  cloudStatus,
   hasTimerBar,
   isNewPlanFormOpen,
   onCancelCreatePlan,
   onCreatePlan,
   onDeletePlan,
+  onDownloadFromCloud,
   onDuplicatePlan,
+  onLogin,
+  onLogout,
   onOpenNewPlanForm,
   onOpenPlan,
   onPlanNameChange,
+  onRegister,
+  onUploadToCloud,
   planName,
   plans,
   saveWarning,
@@ -94,6 +102,16 @@ function PlanList({
           </p>
         )}
         {saveWarning && <p className="warning">{saveWarning}</p>}
+
+        <AccountCard
+          auth={auth}
+          cloudStatus={cloudStatus}
+          onLogin={onLogin}
+          onRegister={onRegister}
+          onLogout={onLogout}
+          onUpload={onUploadToCloud}
+          onDownload={onDownloadFromCloud}
+        />
       </section>
     </main>
   );
