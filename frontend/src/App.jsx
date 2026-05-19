@@ -12,6 +12,7 @@ import { normalizeNumericInputValue } from "./utils/numbers.js";
 import { clearAuth, loadAuth, saveAuth } from "./authStorage.js";
 import { login as apiLogin, register as apiRegister, getRemoteGymData, saveRemoteGymData } from "./api/client.js";
 import { sanitizeForCloud } from "./utils/sanitizeForCloud.js";
+import AuthScreen from "./components/AuthScreen.jsx";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 
@@ -971,6 +972,10 @@ function App() {
     />
   ) : null;
 
+  if (!auth) {
+    return <AuthScreen onLogin={handleLogin} onRegister={handleRegister} />;
+  }
+
   if (!isPlanOpen || !activePlan) {
     return (
       <>
@@ -984,12 +989,10 @@ function App() {
           onDeletePlan={handleDeletePlan}
           onDownloadFromCloud={handleDownloadFromCloud}
           onDuplicatePlan={handleDuplicatePlan}
-          onLogin={handleLogin}
           onLogout={handleLogout}
           onOpenNewPlanForm={() => setIsNewPlanFormOpen(true)}
           onOpenPlan={handleOpenPlan}
           onPlanNameChange={setPlanName}
-          onRegister={handleRegister}
           onUploadToCloud={handleUploadToCloud}
           planName={planName}
           plans={plans}

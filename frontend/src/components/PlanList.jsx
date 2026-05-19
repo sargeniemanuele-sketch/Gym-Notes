@@ -12,12 +12,10 @@ function PlanList({
   onDeletePlan,
   onDownloadFromCloud,
   onDuplicatePlan,
-  onLogin,
   onLogout,
   onOpenNewPlanForm,
   onOpenPlan,
   onPlanNameChange,
-  onRegister,
   onUploadToCloud,
   planName,
   plans,
@@ -106,8 +104,6 @@ function PlanList({
         <AccountCard
           auth={auth}
           cloudStatus={cloudStatus}
-          onLogin={onLogin}
-          onRegister={onRegister}
           onLogout={onLogout}
           onUpload={onUploadToCloud}
           onDownload={onDownloadFromCloud}
