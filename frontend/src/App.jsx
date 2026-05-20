@@ -12,8 +12,17 @@ import {
   savePdfFile,
   savePlanPdfReference
 } from "./pdfStorage.js";
-import { createId, loadGymDataCache, normalizeGymData, saveGymDataCache } from "./storage.js";
+import {
+  clearActiveSessionCache,
+  createId,
+  loadActiveSessionCache,
+  loadGymDataCache,
+  normalizeGymData,
+  saveActiveSessionCache,
+  saveGymDataCache
+} from "./storage.js";
 import { getTodayLabel } from "./utils/formatters.js";
+import { addDeletedId, mergeGymData } from "./utils/mergeGymData.js";
 import { normalizeNumericInputValue } from "./utils/numbers.js";
 import { clearAuth, loadAuth, saveAuth } from "./authStorage.js";
 import {
@@ -96,24 +105,42 @@ function App() {
       return undefined;
     }
 
-    const refresh = () => refreshCloudDataIfNeeded(auth.token);
+    const sync = () => syncCloudDataIfNeeded(auth.token);
     const handleVisibilityChange = () => {
       if (document.visibilityState === "visible") {
-        refresh();
+        sync();
       }
     };
 
-    window.addEventListener("focus", refresh);
+    window.addEventListener("focus", sync);
+    window.addEventListener("online", sync);
     document.addEventListener("visibilitychange", handleVisibilityChange);
-    const intervalId = window.setInterval(refresh, 30000);
+    const intervalId = window.setInterval(sync, 30000);
 
     return () => {
-      window.removeEventListener("focus", refresh);
+      window.removeEventListener("focus", sync);
+      window.removeEventListener("online", sync);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       window.clearInterval(intervalId);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [auth?.token, !!gymData]);
+
+  useEffect(() => {
+    if (!auth?.user || !gymData || activeSession) {
+      return;
+    }
+
+    const cachedSession = loadActiveSessionCache(auth.user);
+
+    if (!cachedSession || !isActiveSessionValid(cachedSession, gymData)) {
+      clearActiveSessionCache(auth.user);
+      return;
+    }
+
+    setActiveSession(cachedSession);
+    setSessionFeedback("Sessione in corso recuperata");
+  }, [auth?.user, gymData, activeSession]);
 
   useEffect(() => {
     if (selectedWorkoutId && hasPlanPdf(activePlan)) {
@@ -412,19 +439,26 @@ function App() {
     }
   }
 
-  async function refreshCloudDataIfNeeded(token) {
+  async function syncCloudDataIfNeeded(token) {
     const now = Date.now();
 
     if (
       document.visibilityState === "hidden" ||
       cloudSaveInFlightRef.current ||
-      pendingCloudDataRef.current ||
       now - lastCloudRefreshAtRef.current < 5000
     ) {
       return;
     }
 
     lastCloudRefreshAtRef.current = now;
+
+    if (pendingCloudDataRef.current) {
+      await flushCloudSave();
+
+      if (pendingCloudDataRef.current) {
+        return;
+      }
+    }
 
     try {
       const remote = await getRemoteGymData(token);
@@ -470,6 +504,8 @@ function App() {
   }
 
   function handleLogout() {
+    clearActiveSessionCache(auth?.user);
+
     if (cloudSaveTimerRef.current) {
       clearTimeout(cloudSaveTimerRef.current);
       cloudSaveTimerRef.current = null;
@@ -503,12 +539,15 @@ function App() {
       }
     }
 
-    setActiveSession({
+    const nextSession = {
       workoutId,
       planId: activePlan.id,
       startedAt: new Date().toISOString(),
       completedSetsByExercise: {}
-    });
+    };
+
+    setActiveSession(nextSession);
+    saveActiveSessionCache(auth?.user, nextSession);
     isCompletingSessionRef.current = false;
     setSessionFeedback("");
   }
@@ -553,6 +592,7 @@ function App() {
 
     persistNextActivePlan(nextPlan);
     setActiveSession(null);
+    clearActiveSessionCache(auth?.user);
     showSessionFeedback("Allenamento completato ✓");
   }
 
@@ -568,13 +608,16 @@ function App() {
         ? current.filter((n) => n !== setNumber)
         : [...current, setNumber].sort((a, b) => a - b);
 
-      return {
+      const nextSession = {
         ...prev,
         completedSetsByExercise: {
           ...prev.completedSetsByExercise,
           [exerciseId]: next
         }
       };
+
+      saveActiveSessionCache(auth?.user, nextSession);
+      return nextSession;
     });
   }
 
@@ -586,6 +629,7 @@ function App() {
     }
 
     setActiveSession(null);
+    clearActiveSessionCache(auth?.user);
     isCompletingSessionRef.current = false;
   }
 
@@ -757,6 +801,11 @@ function App() {
     };
 
     persistNextData(nextData);
+
+    if (activeSession?.planId === planId) {
+      setActiveSession(null);
+      clearActiveSessionCache(auth?.user);
+    }
 
     if (activePlan?.id === planId) {
       setIsPlanOpen(false);
@@ -1013,6 +1062,11 @@ function App() {
       setSelectedWorkoutId(null);
     }
 
+    if (activeSession?.workoutId === workoutId) {
+      setActiveSession(null);
+      clearActiveSessionCache(auth?.user);
+    }
+
     if (editingWorkoutId === workoutId) {
       setEditingWorkoutId(null);
       setWorkoutNameBeforeRename(null);
@@ -1047,6 +1101,8 @@ function App() {
     setIsRenamingPlan(false);
     setPlanNameBeforeRename(null);
     setSelectedWorkoutId(null);
+    setActiveSession(null);
+    clearActiveSessionCache(auth?.user);
     setPlanName("");
     setWorkoutName("");
     setIsNewWorkoutFormOpen(false);
@@ -1308,6 +1364,17 @@ function App() {
       exercises: workout.exercises.filter((exercise) => exercise.id !== exerciseId)
     }));
 
+    if (activeSession?.completedSetsByExercise?.[exerciseId]) {
+      const { [exerciseId]: _removed, ...completedSetsByExercise } = activeSession.completedSetsByExercise;
+      const nextSession = {
+        ...activeSession,
+        completedSetsByExercise
+      };
+
+      setActiveSession(nextSession);
+      saveActiveSessionCache(auth?.user, nextSession);
+    }
+
     persistNextActivePlan({
       ...nextPlan,
       updatedAt: now
@@ -1488,6 +1555,11 @@ function hasPlanPdf(plan) {
   return !!(plan?.cloudPdf?.key || plan?.pdfId);
 }
 
+function isActiveSessionValid(session, data) {
+  const plan = data?.plans?.find((candidate) => candidate.id === session.planId);
+  return !!plan?.workouts?.some((workout) => workout.id === session.workoutId);
+}
+
 async function mergeLocalPdfReferences(data) {
   try {
     const references = await getAllPlanPdfReferences();
@@ -1514,205 +1586,6 @@ async function mergeLocalPdfReferences(data) {
   } catch {
     return data;
   }
-}
-
-function mergeGymData(remoteData, localData) {
-  const remote = normalizeRemoteData(remoteData);
-  const local = normalizeRemoteData(localData);
-  const deletedPlanIds = mergeDeletedIds(remote.deletedPlanIds, local.deletedPlanIds);
-  const resetAt = getNewerOptionalDate(remote.resetAt, local.resetAt);
-  const plansById = new Map(remote.plans.map((plan) => [plan.id, plan]));
-
-  local.plans.forEach((localPlan) => {
-    const remotePlan = plansById.get(localPlan.id);
-    plansById.set(localPlan.id, remotePlan ? mergePlans(remotePlan, localPlan) : localPlan);
-  });
-
-  const plans = filterDeletedItems(Array.from(plansById.values()), deletedPlanIds, resetAt);
-  const localActivePlanExists = plans.some((plan) => plan.id === local.activePlanId);
-  const remoteActivePlanExists = plans.some((plan) => plan.id === remote.activePlanId);
-
-  return normalizeRemoteData({
-    activePlanId: localActivePlanExists ? local.activePlanId : remoteActivePlanExists ? remote.activePlanId : plans[0]?.id ?? null,
-    deletedPlanIds,
-    resetAt,
-    plans
-  });
-}
-
-function mergePlans(remotePlan, localPlan) {
-  const remoteTime = getTimestamp(remotePlan.updatedAt);
-  const localTime = getTimestamp(localPlan.updatedAt);
-  const basePlan = localTime > remoteTime ? localPlan : remotePlan;
-  const mergedPdfFields = getMergedPdfFields(remotePlan, localPlan);
-  const deletedWorkoutIds = mergeDeletedIds(remotePlan.deletedWorkoutIds, localPlan.deletedWorkoutIds);
-  const workouts = filterDeletedItems(
-    mergeById(remotePlan.workouts, localPlan.workouts, mergeWorkouts),
-    deletedWorkoutIds
-  );
-
-  return {
-    ...basePlan,
-    ...mergedPdfFields,
-    createdAt: getOlderDate(remotePlan.createdAt, localPlan.createdAt),
-    updatedAt: getNewerDate(remotePlan.updatedAt, localPlan.updatedAt),
-    deletedWorkoutIds,
-    workouts,
-    sessions: mergeById(remotePlan.sessions ?? [], localPlan.sessions ?? [], mergeSessions)
-  };
-}
-
-function mergeWorkouts(remoteWorkout, localWorkout) {
-  const remoteTime = getTimestamp(remoteWorkout.updatedAt);
-  const localTime = getTimestamp(localWorkout.updatedAt);
-  const baseWorkout = localTime > remoteTime ? localWorkout : remoteWorkout;
-  const deletedExerciseIds = mergeDeletedIds(remoteWorkout.deletedExerciseIds, localWorkout.deletedExerciseIds);
-  const exercises = filterDeletedItems(
-    mergeById(remoteWorkout.exercises, localWorkout.exercises, mergeExercises),
-    deletedExerciseIds
-  );
-
-  return {
-    ...baseWorkout,
-    createdAt: getOlderDate(remoteWorkout.createdAt, localWorkout.createdAt),
-    updatedAt: getNewerDate(remoteWorkout.updatedAt, localWorkout.updatedAt),
-    deletedExerciseIds,
-    exercises
-  };
-}
-
-function mergeExercises(remoteExercise, localExercise) {
-  return getTimestamp(localExercise.updatedAt) > getTimestamp(remoteExercise.updatedAt)
-    ? localExercise
-    : remoteExercise;
-}
-
-function mergeSessions(remoteSession, localSession) {
-  return getTimestamp(localSession.completedAt) > getTimestamp(remoteSession.completedAt)
-    ? localSession
-    : remoteSession;
-}
-
-function mergeById(remoteItems = [], localItems = [], mergeItem) {
-  const itemsById = new Map(remoteItems.map((item) => [item.id, item]));
-
-  localItems.forEach((localItem) => {
-    const remoteItem = itemsById.get(localItem.id);
-    itemsById.set(localItem.id, remoteItem ? mergeItem(remoteItem, localItem) : localItem);
-  });
-
-  return Array.from(itemsById.values());
-}
-
-function addDeletedId(deletedIds = [], id, deletedAt) {
-  return mergeDeletedIds(deletedIds, [{ id, deletedAt }]);
-}
-
-function mergeDeletedIds(first = [], second = []) {
-  const deletedById = new Map();
-
-  [...first, ...second].forEach((item) => {
-    if (!item?.id || !item?.deletedAt) {
-      return;
-    }
-
-    const current = deletedById.get(item.id);
-
-    if (!current || getTimestamp(item.deletedAt) > getTimestamp(current.deletedAt)) {
-      deletedById.set(item.id, item);
-    }
-  });
-
-  return Array.from(deletedById.values());
-}
-
-function filterDeletedItems(items, deletedIds, resetAt = undefined) {
-  const deletedById = new Map(deletedIds.map((item) => [item.id, item.deletedAt]));
-
-  return items.filter((item) => {
-    const deletedAt = deletedById.get(item.id);
-    const itemTimestamp = getTimestamp(item.updatedAt ?? item.createdAt);
-
-    if (resetCutoffApplies(itemTimestamp, resetAt)) {
-      return false;
-    }
-
-    if (!deletedAt) {
-      return true;
-    }
-
-    return itemTimestamp > getTimestamp(deletedAt);
-  });
-}
-
-function getMergedPdfFields(remotePlan, localPlan) {
-  const remoteHasPdf = hasPlanPdf(remotePlan);
-  const localHasPdf = hasPlanPdf(localPlan);
-
-  if (!remoteHasPdf && !localHasPdf) {
-    return {
-      cloudPdf: undefined,
-      pdfId: undefined,
-      pdfName: undefined,
-      pdfSize: undefined,
-      pdfUpdatedAt: undefined
-    };
-  }
-
-  if (!remoteHasPdf) {
-    return getPdfFields(localPlan);
-  }
-
-  if (!localHasPdf) {
-    return getPdfFields(remotePlan);
-  }
-
-  return getTimestamp(getPdfUpdatedAt(localPlan)) > getTimestamp(getPdfUpdatedAt(remotePlan))
-    ? getPdfFields(localPlan)
-    : getPdfFields(remotePlan);
-}
-
-function getPdfFields(plan) {
-  return {
-    cloudPdf: plan.cloudPdf,
-    pdfId: plan.pdfId,
-    pdfName: plan.pdfName,
-    pdfSize: plan.pdfSize,
-    pdfUpdatedAt: plan.pdfUpdatedAt
-  };
-}
-
-function getPdfUpdatedAt(plan) {
-  return plan?.cloudPdf?.updatedAt ?? plan?.pdfUpdatedAt;
-}
-
-function getOlderDate(firstDate, secondDate) {
-  return getTimestamp(firstDate) <= getTimestamp(secondDate) ? firstDate : secondDate;
-}
-
-function getNewerDate(firstDate, secondDate) {
-  return getTimestamp(firstDate) >= getTimestamp(secondDate) ? firstDate : secondDate;
-}
-
-function getNewerOptionalDate(firstDate, secondDate) {
-  if (!firstDate) {
-    return secondDate;
-  }
-
-  if (!secondDate) {
-    return firstDate;
-  }
-
-  return getNewerDate(firstDate, secondDate);
-}
-
-function resetCutoffApplies(itemTimestamp, resetAt) {
-  return !!resetAt && itemTimestamp <= getTimestamp(resetAt);
-}
-
-function getTimestamp(value) {
-  const timestamp = Date.parse(value);
-  return Number.isFinite(timestamp) ? timestamp : 0;
 }
 
 function playTimerBeep() {

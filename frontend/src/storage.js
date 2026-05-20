@@ -7,15 +7,26 @@ export function createId() {
 }
 
 const DATA_CACHE_PREFIX = "gym-notes-data-cache-v1:";
+const ACTIVE_SESSION_PREFIX = "gym-notes-active-session-v1:";
 
-function getUserCacheKey(user) {
+function getUserKey(user) {
   const userId = typeof user?.id === "string" ? user.id : user?.email;
 
   if (!userId) {
     return null;
   }
 
-  return `${DATA_CACHE_PREFIX}${userId}`;
+  return userId;
+}
+
+function getUserCacheKey(user) {
+  const userKey = getUserKey(user);
+  return userKey ? `${DATA_CACHE_PREFIX}${userKey}` : null;
+}
+
+function getActiveSessionKey(user) {
+  const userKey = getUserKey(user);
+  return userKey ? `${ACTIVE_SESSION_PREFIX}${userKey}` : null;
 }
 
 export function loadGymDataCache(user) {
@@ -46,6 +57,47 @@ export function loadGymDataCache(user) {
     };
   } catch {
     return null;
+  }
+}
+
+export function loadActiveSessionCache(user) {
+  try {
+    const key = getActiveSessionKey(user);
+
+    if (!key) {
+      return null;
+    }
+
+    return normalizeActiveSession(JSON.parse(localStorage.getItem(key)));
+  } catch {
+    return null;
+  }
+}
+
+export function saveActiveSessionCache(user, session) {
+  try {
+    const key = getActiveSessionKey(user);
+    const normalizedSession = normalizeActiveSession(session);
+
+    if (!key || !normalizedSession) {
+      return;
+    }
+
+    localStorage.setItem(key, JSON.stringify(normalizedSession));
+  } catch {
+    // Active session recovery is best-effort; completed sessions still persist through gym data.
+  }
+}
+
+export function clearActiveSessionCache(user) {
+  try {
+    const key = getActiveSessionKey(user);
+
+    if (key) {
+      localStorage.removeItem(key);
+    }
+  } catch {
+    // Nothing to do if browser storage is unavailable.
   }
 }
 
@@ -251,4 +303,42 @@ function normalizeDeletedIds(value) {
       id: item.id,
       deletedAt: item.deletedAt
     }));
+}
+
+function normalizeActiveSession(session) {
+  if (
+    !session ||
+    typeof session !== "object" ||
+    typeof session.planId !== "string" ||
+    typeof session.workoutId !== "string" ||
+    typeof session.startedAt !== "string"
+  ) {
+    return null;
+  }
+
+  return {
+    planId: session.planId,
+    workoutId: session.workoutId,
+    startedAt: session.startedAt,
+    completedSetsByExercise: normalizeCompletedSetsByExercise(session.completedSetsByExercise)
+  };
+}
+
+function normalizeCompletedSetsByExercise(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return {};
+  }
+
+  return Object.fromEntries(
+    Object.entries(value)
+      .filter(([exerciseId, completedSets]) => typeof exerciseId === "string" && Array.isArray(completedSets))
+      .map(([exerciseId, completedSets]) => [
+        exerciseId,
+        [...new Set(
+          completedSets
+            .filter((setNumber) => Number.isFinite(setNumber) && setNumber > 0)
+            .map((setNumber) => Math.floor(setNumber))
+        )].sort((a, b) => a - b)
+      ])
+  );
 }
