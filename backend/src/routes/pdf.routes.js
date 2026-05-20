@@ -2,6 +2,7 @@
 
 const { DeleteObjectCommand, GetObjectCommand, PutObjectCommand } = require("@aws-sdk/client-s3");
 const { Router } = require("express");
+const { Readable } = require("stream");
 const multer = require("multer");
 const GymData = require("../models/GymData");
 const authMiddleware = require("../middleware/auth");
@@ -27,6 +28,27 @@ async function deleteR2Object(r2, key) {
 
 function isUserPdfKey(userId, key) {
   return typeof key === "string" && key.startsWith(`${userId}/plans/`);
+}
+
+function isMissingR2Object(err) {
+  return err?.name === "NoSuchKey" || err?.$metadata?.httpStatusCode === 404;
+}
+
+function pipeR2Body(body, res, next) {
+  if (!body) {
+    const err = new Error("PDF non trovato nel cloud");
+    err.status = 404;
+    next(err);
+    return;
+  }
+
+  try {
+    const stream = typeof body.pipe === "function" ? body : Readable.fromWeb(body);
+    stream.on("error", next);
+    stream.pipe(res);
+  } catch (err) {
+    next(err);
+  }
 }
 
 router.post("/plans/:planId", upload.single("pdf"), async (req, res, next) => {
@@ -117,12 +139,22 @@ router.get("/plans/:planId", async (req, res, next) => {
       return res.status(404).json({ error: "PDF non trovato" });
     }
 
-    const object = await r2.client.send(new GetObjectCommand({ Bucket: r2.bucket, Key: plan.cloudPdf.key }));
+    let object;
+
+    try {
+      object = await r2.client.send(new GetObjectCommand({ Bucket: r2.bucket, Key: plan.cloudPdf.key }));
+    } catch (err) {
+      if (isMissingR2Object(err)) {
+        return res.status(404).json({ error: "PDF non trovato nel cloud. Ricarica il PDF dalla scheda." });
+      }
+
+      throw err;
+    }
 
     res.setHeader("Content-Type", object.ContentType ?? "application/pdf");
     res.setHeader("Content-Disposition", `inline; filename="${encodeURIComponent(plan.cloudPdf.name ?? "scheda.pdf")}"`);
 
-    object.Body.pipe(res);
+    pipeR2Body(object.Body, res, next);
   } catch (err) {
     next(err);
   }

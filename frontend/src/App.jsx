@@ -71,6 +71,8 @@ function App() {
   const cloudSavePromiseRef = useRef(null);
   const pendingCloudDataRef = useRef(null);
   const cloudSaveTokenRef = useRef(null);
+  const lastCloudUpdatedAtRef = useRef(null);
+  const lastCloudRefreshAtRef = useRef(0);
   const isCompletingSessionRef = useRef(false);
   const notifiedTimerRef = useRef(null);
   const pdfInputRef = useRef(null);
@@ -88,6 +90,30 @@ function App() {
     loadCloudData(auth.token, { verifyToken: true });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (!auth?.token || !gymData) {
+      return undefined;
+    }
+
+    const refresh = () => refreshCloudDataIfNeeded(auth.token);
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        refresh();
+      }
+    };
+
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    const intervalId = window.setInterval(refresh, 30000);
+
+    return () => {
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.clearInterval(intervalId);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [auth?.token, !!gymData]);
 
   useEffect(() => {
     if (selectedWorkoutId && hasPlanPdf(activePlan)) {
@@ -194,7 +220,8 @@ function App() {
         lastAttemptedData = nextData;
 
         cloudSavePromiseRef.current = saveRemoteGymData(token, sanitizeForCloud(nextData));
-        await cloudSavePromiseRef.current;
+        const savedRemote = await cloudSavePromiseRef.current;
+        lastCloudUpdatedAtRef.current = savedRemote.updatedAt ?? lastCloudUpdatedAtRef.current;
       }
 
       setSaveWarning((current) =>
@@ -278,6 +305,7 @@ function App() {
       }
 
       const remote = await getRemoteGymData(token);
+      lastCloudUpdatedAtRef.current = remote.updatedAt ?? null;
       await applyCloudGymData(remote.data ?? { activePlanId: null, plans: [] });
       showSavedStatus("Dati cloud caricati");
       return true;
@@ -294,6 +322,44 @@ function App() {
       return false;
     } finally {
       setIsLoadingData(false);
+    }
+  }
+
+  async function refreshCloudDataIfNeeded(token) {
+    const now = Date.now();
+
+    if (
+      document.visibilityState === "hidden" ||
+      cloudSaveInFlightRef.current ||
+      pendingCloudDataRef.current ||
+      now - lastCloudRefreshAtRef.current < 5000
+    ) {
+      return;
+    }
+
+    lastCloudRefreshAtRef.current = now;
+
+    try {
+      const remote = await getRemoteGymData(token);
+      const remoteUpdatedAt = remote.updatedAt ?? null;
+
+      if (!remoteUpdatedAt || remoteUpdatedAt === lastCloudUpdatedAtRef.current) {
+        return;
+      }
+
+      lastCloudUpdatedAtRef.current = remoteUpdatedAt;
+      await applyCloudGymData(remote.data ?? { activePlanId: null, plans: [] });
+      setSaveWarning("");
+      showSavedStatus("Dati cloud aggiornati");
+    } catch (err) {
+      if (err.status === 401) {
+        clearAuth();
+        setAuth(null);
+        setGymData(null);
+        return;
+      }
+
+      setSaveWarning("Cloud non disponibile. Le modifiche verranno risincronizzate più avanti.");
     }
   }
 
