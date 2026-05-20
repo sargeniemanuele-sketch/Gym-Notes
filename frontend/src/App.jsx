@@ -165,22 +165,38 @@ function App() {
 
   async function flushCloudSave() {
     if (cloudSaveInFlightRef.current) {
-      return cloudSavePromiseRef.current;
-    }
+      try {
+        await cloudSavePromiseRef.current;
+      } catch {
+        // The active flush handles the error and keeps the latest data queued.
+      }
 
-    const token = cloudSaveTokenRef.current;
-    const nextData = pendingCloudDataRef.current;
+      if (pendingCloudDataRef.current) {
+        return flushCloudSave();
+      }
 
-    if (!token || !nextData) {
       return;
     }
 
-    pendingCloudDataRef.current = null;
+    let lastAttemptedData = null;
+
+    if (!cloudSaveTokenRef.current || !pendingCloudDataRef.current) {
+      return;
+    }
+
     cloudSaveInFlightRef.current = true;
 
     try {
-      cloudSavePromiseRef.current = saveRemoteGymData(token, sanitizeForCloud(nextData));
-      await cloudSavePromiseRef.current;
+      while (cloudSaveTokenRef.current && pendingCloudDataRef.current) {
+        const token = cloudSaveTokenRef.current;
+        const nextData = pendingCloudDataRef.current;
+        pendingCloudDataRef.current = null;
+        lastAttemptedData = nextData;
+
+        cloudSavePromiseRef.current = saveRemoteGymData(token, sanitizeForCloud(nextData));
+        await cloudSavePromiseRef.current;
+      }
+
       setSaveWarning((current) =>
         current.startsWith("Cloud non disponibile") ? "" : current
       );
@@ -193,14 +209,14 @@ function App() {
         return;
       }
 
+      if (!pendingCloudDataRef.current && lastAttemptedData) {
+        pendingCloudDataRef.current = lastAttemptedData;
+      }
+
       setSaveWarning("Cloud non disponibile. Le modifiche restano in memoria e verranno risincronizzate più avanti.");
     } finally {
       cloudSaveInFlightRef.current = false;
       cloudSavePromiseRef.current = null;
-    }
-
-    if (pendingCloudDataRef.current) {
-      flushCloudSave();
     }
   }
 
@@ -928,10 +944,10 @@ function App() {
       });
 
       persistNextActivePlan(nextPlan);
-      showSavedStatus("PDF salvato sul dispositivo");
-    } catch {
+      showSavedStatus("PDF salvato nel cloud e su questo dispositivo");
+    } catch (err) {
       deletePdfFile(pdfId).catch(() => {});
-      setPdfError("Non è stato possibile salvare il PDF.");
+      setPdfError(err?.message ?? "Non è stato possibile salvare il PDF.");
     }
   }
 

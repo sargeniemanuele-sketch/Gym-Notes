@@ -52,10 +52,11 @@ function PdfReferenceSection({ authToken, cloudPdf, isVisible, onHide, onPageCha
           setNumPages(totalPages);
           setReferenceStatus("ready");
         }
-      } catch {
+      } catch (err) {
         if (!isCancelled) {
           setReferenceStatus("error");
-          setReferenceError("Il PDF non può essere caricato.");
+          console.error("PDF load failed", err);
+          setReferenceError(getPdfErrorMessage(err));
         }
       }
     }
@@ -143,6 +144,22 @@ function PdfReferenceSection({ authToken, cloudPdf, isVisible, onHide, onPageCha
       </button>
     </div>
   );
+}
+
+function getPdfErrorMessage(err) {
+  if (err?.message === "missing-pdf") {
+    return "PDF non trovato su questo dispositivo o nel cloud.";
+  }
+
+  if (err?.message === "missing-pages") {
+    return "Il PDF non contiene pagine leggibili.";
+  }
+
+  if (err?.status === 404) {
+    return "PDF non trovato nel cloud. Ricarica il PDF dalla scheda.";
+  }
+
+  return err?.message ?? "Il PDF non può essere caricato.";
 }
 
 export default PdfReferenceSection;
