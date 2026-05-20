@@ -12,7 +12,7 @@ import {
   savePdfFile,
   savePlanPdfReference
 } from "./pdfStorage.js";
-import { createId, normalizeGymData } from "./storage.js";
+import { createId, loadGymDataCache, normalizeGymData, saveGymDataCache } from "./storage.js";
 import { getTodayLabel } from "./utils/formatters.js";
 import { normalizeNumericInputValue } from "./utils/numbers.js";
 import { clearAuth, loadAuth, saveAuth } from "./authStorage.js";
@@ -176,8 +176,16 @@ function App() {
   }
 
   function persistNextData(nextData) {
-    const normalizedData = normalizeRemoteData(nextData);
+    const normalizedData = normalizeRemoteData({
+      deletedPlanIds: gymData?.deletedPlanIds ?? [],
+      resetAt: gymData?.resetAt,
+      ...nextData
+    });
     applyGymData(normalizedData);
+    saveGymDataCache(auth?.user, normalizedData, {
+      hasPendingChanges: true,
+      remoteUpdatedAt: lastCloudUpdatedAtRef.current
+    });
     scheduleCloudSave(normalizedData);
   }
 
@@ -219,9 +227,35 @@ function App() {
         pendingCloudDataRef.current = null;
         lastAttemptedData = nextData;
 
-        cloudSavePromiseRef.current = saveRemoteGymData(token, sanitizeForCloud(nextData));
-        const savedRemote = await cloudSavePromiseRef.current;
-        lastCloudUpdatedAtRef.current = savedRemote.updatedAt ?? lastCloudUpdatedAtRef.current;
+        try {
+          cloudSavePromiseRef.current = saveRemoteGymData(
+            token,
+            sanitizeForCloud(nextData),
+            lastCloudUpdatedAtRef.current
+          );
+          const savedRemote = await cloudSavePromiseRef.current;
+          rememberRemoteUpdatedAt(savedRemote);
+          saveGymDataCache(auth?.user, nextData, {
+            hasPendingChanges: false,
+            remoteUpdatedAt: lastCloudUpdatedAtRef.current
+          });
+        } catch (err) {
+          if (err.status === 409 && err.payload?.data) {
+            lastCloudUpdatedAtRef.current = err.payload.updatedAt ?? lastCloudUpdatedAtRef.current;
+            const mergedData = mergeGymData(err.payload.data, nextData);
+            const mergedWithLocalPdfRefs = await mergeLocalPdfReferences(mergedData);
+            setGymData(mergedWithLocalPdfRefs);
+            saveGymDataCache(auth?.user, mergedWithLocalPdfRefs, {
+              hasPendingChanges: true,
+              remoteUpdatedAt: lastCloudUpdatedAtRef.current
+            });
+            pendingCloudDataRef.current = mergedWithLocalPdfRefs;
+            setSaveWarning("Dati aggiornati da un altro dispositivo: ho unito le modifiche e riprovo il salvataggio.");
+            continue;
+          }
+
+          throw err;
+        }
       }
 
       setSaveWarning((current) =>
@@ -238,6 +272,13 @@ function App() {
 
       if (!pendingCloudDataRef.current && lastAttemptedData) {
         pendingCloudDataRef.current = lastAttemptedData;
+      }
+
+      if (lastAttemptedData) {
+        saveGymDataCache(auth?.user, lastAttemptedData, {
+          hasPendingChanges: true,
+          remoteUpdatedAt: lastCloudUpdatedAtRef.current
+        });
       }
 
       setSaveWarning("Cloud non disponibile. Le modifiche restano in memoria e verranno risincronizzate più avanti.");
@@ -291,10 +332,22 @@ function App() {
     }, 3000);
   }
 
-  async function loadCloudData(token, { verifyToken = false } = {}) {
+  function rememberRemoteUpdatedAt(result) {
+    lastCloudUpdatedAtRef.current = result?.updatedAt ?? lastCloudUpdatedAtRef.current;
+  }
+
+  async function loadCloudData(token, { userOverride = null, verifyToken = false } = {}) {
     setIsLoadingData(true);
     setCloudLoadError("");
     setSaveWarning("");
+
+    let cacheUser = userOverride ?? auth?.user;
+    let cached = loadGymDataCache(cacheUser);
+
+    if (cached?.data) {
+      lastCloudUpdatedAtRef.current = cached.remoteUpdatedAt;
+      await applyCloudGymData(cached.data);
+    }
 
     try {
       if (verifyToken) {
@@ -302,12 +355,40 @@ function App() {
         const nextAuth = { token, user: currentUser.user };
         saveAuth(nextAuth);
         setAuth(nextAuth);
+        cacheUser = currentUser.user;
+        cached = loadGymDataCache(cacheUser) ?? cached;
+
+        if (cached?.data) {
+          lastCloudUpdatedAtRef.current = cached.remoteUpdatedAt;
+          await applyCloudGymData(cached.data);
+        }
       }
 
       const remote = await getRemoteGymData(token);
       lastCloudUpdatedAtRef.current = remote.updatedAt ?? null;
-      await applyCloudGymData(remote.data ?? { activePlanId: null, plans: [] });
-      showSavedStatus("Dati cloud caricati");
+      const remoteData = remote.data ?? { activePlanId: null, plans: [] };
+
+      if (cached?.hasPendingChanges && cached.data) {
+        const mergedData = mergeGymData(remoteData, cached.data);
+        const mergedWithLocalPdfRefs = await mergeLocalPdfReferences(mergedData);
+        setGymData(mergedWithLocalPdfRefs);
+        saveGymDataCache(cacheUser, mergedWithLocalPdfRefs, {
+          hasPendingChanges: true,
+          remoteUpdatedAt: lastCloudUpdatedAtRef.current
+        });
+        pendingCloudDataRef.current = mergedWithLocalPdfRefs;
+        cloudSaveTokenRef.current = token;
+        flushCloudSave();
+        showSavedStatus("Dati locali recuperati");
+      } else {
+        await applyCloudGymData(remoteData);
+        saveGymDataCache(cacheUser, remoteData, {
+          hasPendingChanges: false,
+          remoteUpdatedAt: lastCloudUpdatedAtRef.current
+        });
+        showSavedStatus("Dati cloud caricati");
+      }
+
       return true;
     } catch (err) {
       if (err.status === 401) {
@@ -315,6 +396,12 @@ function App() {
         setAuth(null);
         setGymData(null);
         return false;
+      }
+
+      if (cached?.data) {
+        await applyCloudGymData(cached.data);
+        setSaveWarning("Cloud non disponibile. Uso i dati salvati su questo dispositivo e riprovo la sincronizzazione.");
+        return true;
       }
 
       setCloudLoadError("Cloud non disponibile. Riprova tra poco.");
@@ -348,7 +435,12 @@ function App() {
       }
 
       lastCloudUpdatedAtRef.current = remoteUpdatedAt;
-      await applyCloudGymData(remote.data ?? { activePlanId: null, plans: [] });
+      const remoteData = remote.data ?? { activePlanId: null, plans: [] };
+      await applyCloudGymData(remoteData);
+      saveGymDataCache(auth?.user, remoteData, {
+        hasPendingChanges: false,
+        remoteUpdatedAt: lastCloudUpdatedAtRef.current
+      });
       setSaveWarning("");
       showSavedStatus("Dati cloud aggiornati");
     } catch (err) {
@@ -366,14 +458,14 @@ function App() {
   async function handleLogin(email, password) {
     const result = await apiLogin(email, password);
     setAuth(result);
-    const loaded = await loadCloudData(result.token);
+    const loaded = await loadCloudData(result.token, { userOverride: result.user });
     if (loaded) saveAuth(result);
   }
 
   async function handleRegister(email, password) {
     const result = await apiRegister(email, password);
     setAuth(result);
-    const loaded = await loadCloudData(result.token);
+    const loaded = await loadCloudData(result.token, { userOverride: result.user });
     if (loaded) saveAuth(result);
   }
 
@@ -653,16 +745,18 @@ function App() {
       return;
     }
 
+    const now = new Date().toISOString();
     const nextPlans = plans.filter((plan) => plan.id !== planId);
     const nextActivePlanId =
       gymData?.activePlanId === planId ? nextPlans[0]?.id ?? null : gymData?.activePlanId ?? nextPlans[0]?.id ?? null;
 
     const nextData = {
       activePlanId: nextActivePlanId,
+      deletedPlanIds: addDeletedId(gymData?.deletedPlanIds, planId, now),
       plans: nextPlans
     };
 
-    applyGymData(nextData);
+    persistNextData(nextData);
 
     if (activePlan?.id === planId) {
       setIsPlanOpen(false);
@@ -690,12 +784,13 @@ function App() {
               : Promise.resolve()
           ])
         )
-        .then(() => scheduleCloudSave(nextData))
+        .then((results) => {
+          results.forEach(rememberRemoteUpdatedAt);
+          scheduleCloudSave(nextData);
+        })
         .catch(() => {
           setSaveWarning("La scheda è stata rimossa dalla vista, ma il PDF non è stato cancellato dal cloud. Riprova.");
         });
-    } else {
-      scheduleCloudSave(nextData);
     }
   }
 
@@ -906,9 +1001,11 @@ function App() {
       return;
     }
 
+    const now = new Date().toISOString();
     const nextPlan = {
       ...activePlan,
-      updatedAt: new Date().toISOString(),
+      updatedAt: now,
+      deletedWorkoutIds: addDeletedId(activePlan.deletedWorkoutIds, workoutId, now),
       workouts: activePlan.workouts.filter((workout) => workout.id !== workoutId)
     };
 
@@ -934,8 +1031,17 @@ function App() {
 
     const pdfIds = [...new Set(plans.map((plan) => plan.pdfId).filter(Boolean))];
 
-    const nextData = { activePlanId: null, plans: [] };
-    applyGymData(nextData);
+    const now = new Date().toISOString();
+    const nextData = {
+      activePlanId: null,
+      deletedPlanIds: [
+        ...(gymData?.deletedPlanIds ?? []),
+        ...plans.map((plan) => ({ id: plan.id, deletedAt: now }))
+      ],
+      resetAt: now,
+      plans: []
+    };
+    persistNextData(nextData);
     setIsPlanOpen(false);
     setIsNewPlanFormOpen(false);
     setIsRenamingPlan(false);
@@ -966,12 +1072,13 @@ function App() {
               .map((plan) => deletePlanPdf(auth?.token, plan.id, plan.cloudPdf.key))
           ])
         )
-        .then(() => scheduleCloudSave(nextData))
+        .then((results) => {
+          results.forEach(rememberRemoteUpdatedAt);
+          scheduleCloudSave(nextData);
+        })
         .catch(() => {
           setSaveWarning("I dati sono stati rimossi dalla vista, ma non tutti i PDF sono stati cancellati dal cloud. Riprova.");
         });
-    } else {
-      scheduleCloudSave(nextData);
     }
   }
 
@@ -999,6 +1106,7 @@ function App() {
     try {
       await flushRequiredCloudSave();
       const uploadResult = await uploadPlanPdf(auth?.token, activePlan.id, file);
+      rememberRemoteUpdatedAt(uploadResult);
       const cloudPdf = uploadResult.cloudPdf;
       const localPdfId = cloudPdf?.key ?? pdfId;
       await savePdfFile(localPdfId, file);
@@ -1049,7 +1157,8 @@ function App() {
 
     try {
       await flushRequiredCloudSave();
-      await deletePlanPdf(auth?.token, activePlan.id, activePlan.cloudPdf?.key);
+      const deleteResult = await deletePlanPdf(auth?.token, activePlan.id, activePlan.cloudPdf?.key);
+      rememberRemoteUpdatedAt(deleteResult);
       if (activePlan.pdfId) {
         await deletePdfFile(activePlan.pdfId);
       }
@@ -1131,10 +1240,14 @@ function App() {
 
     const nextPlan = updateWorkoutInPlan(activePlan, selectedWorkout.id, (workout) => ({
       ...workout,
+      updatedAt: now,
       exercises: [...workout.exercises, nextExercise]
     }));
 
-    persistNextActivePlan(nextPlan);
+    persistNextActivePlan({
+      ...nextPlan,
+      updatedAt: now
+    });
     showSavedStatus("Esercizio salvato");
     setExerciseDraft(emptyExerciseDraft);
     setExerciseError("");
@@ -1152,8 +1265,10 @@ function App() {
       return;
     }
 
+    const now = new Date().toISOString();
     const nextPlan = updateWorkoutInPlan(activePlan, selectedWorkout.id, (workout) => ({
       ...workout,
+      updatedAt: now,
       exercises: workout.exercises.map((exercise) => {
         if (exercise.id !== exerciseId) {
           return exercise;
@@ -1162,12 +1277,15 @@ function App() {
         return {
           ...exercise,
           [field]: value,
-          updatedAt: new Date().toISOString()
+          updatedAt: now
         };
       })
     }));
 
-    persistNextActivePlan(nextPlan);
+    persistNextActivePlan({
+      ...nextPlan,
+      updatedAt: now
+    });
     showSavedStatus();
   }
 
@@ -1182,12 +1300,18 @@ function App() {
       return;
     }
 
+    const now = new Date().toISOString();
     const nextPlan = updateWorkoutInPlan(activePlan, selectedWorkout.id, (workout) => ({
       ...workout,
+      updatedAt: now,
+      deletedExerciseIds: addDeletedId(workout.deletedExerciseIds, exerciseId, now),
       exercises: workout.exercises.filter((exercise) => exercise.id !== exerciseId)
     }));
 
-    persistNextActivePlan(nextPlan);
+    persistNextActivePlan({
+      ...nextPlan,
+      updatedAt: now
+    });
     showSavedStatus("Esercizio eliminato");
   }
 
@@ -1294,6 +1418,7 @@ function App() {
           onWorkoutNameChange={handleWorkoutNameChange}
           onWorkoutPdfPageChange={handleWorkoutPdfPageChange}
           saveStatus={saveStatus}
+          saveWarning={saveWarning}
           selectedWorkout={selectedWorkout}
           sessionFeedback={sessionFeedback}
           todayLabel={todayLabel}
@@ -1389,6 +1514,205 @@ async function mergeLocalPdfReferences(data) {
   } catch {
     return data;
   }
+}
+
+function mergeGymData(remoteData, localData) {
+  const remote = normalizeRemoteData(remoteData);
+  const local = normalizeRemoteData(localData);
+  const deletedPlanIds = mergeDeletedIds(remote.deletedPlanIds, local.deletedPlanIds);
+  const resetAt = getNewerOptionalDate(remote.resetAt, local.resetAt);
+  const plansById = new Map(remote.plans.map((plan) => [plan.id, plan]));
+
+  local.plans.forEach((localPlan) => {
+    const remotePlan = plansById.get(localPlan.id);
+    plansById.set(localPlan.id, remotePlan ? mergePlans(remotePlan, localPlan) : localPlan);
+  });
+
+  const plans = filterDeletedItems(Array.from(plansById.values()), deletedPlanIds, resetAt);
+  const localActivePlanExists = plans.some((plan) => plan.id === local.activePlanId);
+  const remoteActivePlanExists = plans.some((plan) => plan.id === remote.activePlanId);
+
+  return normalizeRemoteData({
+    activePlanId: localActivePlanExists ? local.activePlanId : remoteActivePlanExists ? remote.activePlanId : plans[0]?.id ?? null,
+    deletedPlanIds,
+    resetAt,
+    plans
+  });
+}
+
+function mergePlans(remotePlan, localPlan) {
+  const remoteTime = getTimestamp(remotePlan.updatedAt);
+  const localTime = getTimestamp(localPlan.updatedAt);
+  const basePlan = localTime > remoteTime ? localPlan : remotePlan;
+  const mergedPdfFields = getMergedPdfFields(remotePlan, localPlan);
+  const deletedWorkoutIds = mergeDeletedIds(remotePlan.deletedWorkoutIds, localPlan.deletedWorkoutIds);
+  const workouts = filterDeletedItems(
+    mergeById(remotePlan.workouts, localPlan.workouts, mergeWorkouts),
+    deletedWorkoutIds
+  );
+
+  return {
+    ...basePlan,
+    ...mergedPdfFields,
+    createdAt: getOlderDate(remotePlan.createdAt, localPlan.createdAt),
+    updatedAt: getNewerDate(remotePlan.updatedAt, localPlan.updatedAt),
+    deletedWorkoutIds,
+    workouts,
+    sessions: mergeById(remotePlan.sessions ?? [], localPlan.sessions ?? [], mergeSessions)
+  };
+}
+
+function mergeWorkouts(remoteWorkout, localWorkout) {
+  const remoteTime = getTimestamp(remoteWorkout.updatedAt);
+  const localTime = getTimestamp(localWorkout.updatedAt);
+  const baseWorkout = localTime > remoteTime ? localWorkout : remoteWorkout;
+  const deletedExerciseIds = mergeDeletedIds(remoteWorkout.deletedExerciseIds, localWorkout.deletedExerciseIds);
+  const exercises = filterDeletedItems(
+    mergeById(remoteWorkout.exercises, localWorkout.exercises, mergeExercises),
+    deletedExerciseIds
+  );
+
+  return {
+    ...baseWorkout,
+    createdAt: getOlderDate(remoteWorkout.createdAt, localWorkout.createdAt),
+    updatedAt: getNewerDate(remoteWorkout.updatedAt, localWorkout.updatedAt),
+    deletedExerciseIds,
+    exercises
+  };
+}
+
+function mergeExercises(remoteExercise, localExercise) {
+  return getTimestamp(localExercise.updatedAt) > getTimestamp(remoteExercise.updatedAt)
+    ? localExercise
+    : remoteExercise;
+}
+
+function mergeSessions(remoteSession, localSession) {
+  return getTimestamp(localSession.completedAt) > getTimestamp(remoteSession.completedAt)
+    ? localSession
+    : remoteSession;
+}
+
+function mergeById(remoteItems = [], localItems = [], mergeItem) {
+  const itemsById = new Map(remoteItems.map((item) => [item.id, item]));
+
+  localItems.forEach((localItem) => {
+    const remoteItem = itemsById.get(localItem.id);
+    itemsById.set(localItem.id, remoteItem ? mergeItem(remoteItem, localItem) : localItem);
+  });
+
+  return Array.from(itemsById.values());
+}
+
+function addDeletedId(deletedIds = [], id, deletedAt) {
+  return mergeDeletedIds(deletedIds, [{ id, deletedAt }]);
+}
+
+function mergeDeletedIds(first = [], second = []) {
+  const deletedById = new Map();
+
+  [...first, ...second].forEach((item) => {
+    if (!item?.id || !item?.deletedAt) {
+      return;
+    }
+
+    const current = deletedById.get(item.id);
+
+    if (!current || getTimestamp(item.deletedAt) > getTimestamp(current.deletedAt)) {
+      deletedById.set(item.id, item);
+    }
+  });
+
+  return Array.from(deletedById.values());
+}
+
+function filterDeletedItems(items, deletedIds, resetAt = undefined) {
+  const deletedById = new Map(deletedIds.map((item) => [item.id, item.deletedAt]));
+
+  return items.filter((item) => {
+    const deletedAt = deletedById.get(item.id);
+    const itemTimestamp = getTimestamp(item.updatedAt ?? item.createdAt);
+
+    if (resetCutoffApplies(itemTimestamp, resetAt)) {
+      return false;
+    }
+
+    if (!deletedAt) {
+      return true;
+    }
+
+    return itemTimestamp > getTimestamp(deletedAt);
+  });
+}
+
+function getMergedPdfFields(remotePlan, localPlan) {
+  const remoteHasPdf = hasPlanPdf(remotePlan);
+  const localHasPdf = hasPlanPdf(localPlan);
+
+  if (!remoteHasPdf && !localHasPdf) {
+    return {
+      cloudPdf: undefined,
+      pdfId: undefined,
+      pdfName: undefined,
+      pdfSize: undefined,
+      pdfUpdatedAt: undefined
+    };
+  }
+
+  if (!remoteHasPdf) {
+    return getPdfFields(localPlan);
+  }
+
+  if (!localHasPdf) {
+    return getPdfFields(remotePlan);
+  }
+
+  return getTimestamp(getPdfUpdatedAt(localPlan)) > getTimestamp(getPdfUpdatedAt(remotePlan))
+    ? getPdfFields(localPlan)
+    : getPdfFields(remotePlan);
+}
+
+function getPdfFields(plan) {
+  return {
+    cloudPdf: plan.cloudPdf,
+    pdfId: plan.pdfId,
+    pdfName: plan.pdfName,
+    pdfSize: plan.pdfSize,
+    pdfUpdatedAt: plan.pdfUpdatedAt
+  };
+}
+
+function getPdfUpdatedAt(plan) {
+  return plan?.cloudPdf?.updatedAt ?? plan?.pdfUpdatedAt;
+}
+
+function getOlderDate(firstDate, secondDate) {
+  return getTimestamp(firstDate) <= getTimestamp(secondDate) ? firstDate : secondDate;
+}
+
+function getNewerDate(firstDate, secondDate) {
+  return getTimestamp(firstDate) >= getTimestamp(secondDate) ? firstDate : secondDate;
+}
+
+function getNewerOptionalDate(firstDate, secondDate) {
+  if (!firstDate) {
+    return secondDate;
+  }
+
+  if (!secondDate) {
+    return firstDate;
+  }
+
+  return getNewerDate(firstDate, secondDate);
+}
+
+function resetCutoffApplies(itemTimestamp, resetAt) {
+  return !!resetAt && itemTimestamp <= getTimestamp(resetAt);
+}
+
+function getTimestamp(value) {
+  const timestamp = Date.parse(value);
+  return Number.isFinite(timestamp) ? timestamp : 0;
 }
 
 function playTimerBeep() {

@@ -22,6 +22,7 @@ async function request(path, { method = "GET", token, body } = {}) {
     if (!res.ok) {
       const err = new Error(json.error ?? `Errore ${res.status}`);
       err.status = res.status;
+      err.payload = json;
       throw err;
     }
 
@@ -84,8 +85,8 @@ export function getRemoteGymData(token) {
   return request("/api/sync/data", { token });
 }
 
-export function saveRemoteGymData(token, data) {
-  return request("/api/sync/data", { method: "PUT", token, body: { data } });
+export function saveRemoteGymData(token, data, baseUpdatedAt) {
+  return request("/api/sync/data", { method: "PUT", token, body: { data, baseUpdatedAt } });
 }
 
 export function uploadPlanPdf(token, planId, file) {

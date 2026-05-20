@@ -38,6 +38,7 @@ function WorkoutDetail({
   onWorkoutNameChange,
   onWorkoutPdfPageChange,
   saveStatus,
+  saveWarning,
   selectedWorkout,
   sessionFeedback,
   todayLabel
@@ -178,6 +179,8 @@ function WorkoutDetail({
               + Aggiungi esercizio
             </button>
           )}
+
+          {saveWarning && <p className="warning">{saveWarning}</p>}
         </section>
       </section>
     </main>

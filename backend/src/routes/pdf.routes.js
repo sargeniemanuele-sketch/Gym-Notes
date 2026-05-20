@@ -23,7 +23,15 @@ async function deleteR2Object(r2, key) {
     return;
   }
 
-  await r2.client.send(new DeleteObjectCommand({ Bucket: r2.bucket, Key: key }));
+  try {
+    await r2.client.send(new DeleteObjectCommand({ Bucket: r2.bucket, Key: key }));
+  } catch (err) {
+    if (isMissingR2Object(err)) {
+      return;
+    }
+
+    throw err;
+  }
 }
 
 function isUserPdfKey(userId, key) {

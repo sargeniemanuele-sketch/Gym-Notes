@@ -6,6 +6,71 @@ export function createId() {
   return `${Date.now().toString()}-${Math.random().toString(16).slice(2)}`;
 }
 
+const DATA_CACHE_PREFIX = "gym-notes-data-cache-v1:";
+
+function getUserCacheKey(user) {
+  const userId = typeof user?.id === "string" ? user.id : user?.email;
+
+  if (!userId) {
+    return null;
+  }
+
+  return `${DATA_CACHE_PREFIX}${userId}`;
+}
+
+export function loadGymDataCache(user) {
+  try {
+    const key = getUserCacheKey(user);
+
+    if (!key) {
+      return null;
+    }
+
+    const raw = localStorage.getItem(key);
+
+    if (!raw) {
+      return null;
+    }
+
+    const parsed = JSON.parse(raw);
+
+    if (!parsed || typeof parsed !== "object") {
+      return null;
+    }
+
+    return {
+      data: normalizeGymData(parsed.data),
+      hasPendingChanges: parsed.hasPendingChanges === true,
+      remoteUpdatedAt: typeof parsed.remoteUpdatedAt === "string" ? parsed.remoteUpdatedAt : null,
+      savedAt: typeof parsed.savedAt === "string" ? parsed.savedAt : null
+    };
+  } catch {
+    return null;
+  }
+}
+
+export function saveGymDataCache(user, data, { hasPendingChanges = false, remoteUpdatedAt = null } = {}) {
+  try {
+    const key = getUserCacheKey(user);
+
+    if (!key) {
+      return;
+    }
+
+    localStorage.setItem(
+      key,
+      JSON.stringify({
+        data: normalizeGymData(data),
+        hasPendingChanges,
+        remoteUpdatedAt,
+        savedAt: new Date().toISOString()
+      })
+    );
+  } catch {
+    // If local storage is full or blocked, cloud sync still remains the source of truth.
+  }
+}
+
 export function normalizeGymData(data) {
   if (!data || typeof data !== "object") {
     return emptyGymData();
@@ -18,6 +83,8 @@ export function normalizeGymData(data) {
 
     return {
       activePlanId: activePlanExists ? storedActivePlanId : plans[0]?.id ?? null,
+      deletedPlanIds: normalizeDeletedIds(data.deletedPlanIds),
+      resetAt: typeof data.resetAt === "string" ? data.resetAt : undefined,
       plans
     };
   }
@@ -29,6 +96,8 @@ export function normalizeGymData(data) {
   const migratedPlan = normalizePlan(data);
   return {
     activePlanId: migratedPlan.id,
+    deletedPlanIds: [],
+    resetAt: undefined,
     plans: [migratedPlan]
   };
 }
@@ -36,6 +105,8 @@ export function normalizeGymData(data) {
 function emptyGymData() {
   return {
     activePlanId: null,
+    deletedPlanIds: [],
+    resetAt: undefined,
     plans: []
   };
 }
@@ -62,6 +133,7 @@ function normalizePlan(data) {
     pdfSize: typeof data.pdfSize === "number" ? data.pdfSize : undefined,
     pdfUpdatedAt: typeof data.pdfUpdatedAt === "string" ? data.pdfUpdatedAt : undefined,
     cloudPdf: normalizeCloudPdf(data.cloudPdf),
+    deletedWorkoutIds: normalizeDeletedIds(data.deletedWorkoutIds),
     workouts: Array.isArray(data.workouts) ? data.workouts.filter(isObject).map(normalizeWorkout) : [],
     sessions: Array.isArray(data.sessions) ? data.sessions.filter(isObject).map(normalizeSession) : []
   };
@@ -126,6 +198,7 @@ function normalizeWorkout(workout) {
     createdAt: workoutCreatedAt,
     updatedAt: typeof workout.updatedAt === "string" ? workout.updatedAt : workoutCreatedAt,
     pdfPage: typeof workout.pdfPage === "number" && Number.isFinite(workout.pdfPage) ? workout.pdfPage : null,
+    deletedExerciseIds: normalizeDeletedIds(workout.deletedExerciseIds),
     exercises: Array.isArray(workout.exercises) ? workout.exercises.filter(isObject).map(normalizeExercise) : []
   };
 }
@@ -164,4 +237,18 @@ function normalizeSimpleNumberText(value) {
   }
 
   return numberMatch[1].replace(",", ".");
+}
+
+function normalizeDeletedIds(value) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .filter(isObject)
+    .filter((item) => typeof item.id === "string" && typeof item.deletedAt === "string")
+    .map((item) => ({
+      id: item.id,
+      deletedAt: item.deletedAt
+    }));
 }
