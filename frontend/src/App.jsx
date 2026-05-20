@@ -1136,7 +1136,6 @@ function App() {
         <PlanList
           auth={auth}
           hasTimerBar={!!activeTimer}
-          authToken={auth?.token}
           isNewPlanFormOpen={isNewPlanFormOpen}
           onCancelCreatePlan={handleCancelCreatePlan}
           onCreatePlan={handleCreatePlan}
@@ -1163,6 +1162,7 @@ function App() {
           activePlan={activePlan}
           activeSession={activeSession}
           activeTimer={activeTimer}
+          authToken={auth?.token}
           editingWorkoutId={editingWorkoutId}
           exerciseDraft={exerciseDraft}
           exerciseError={exerciseError}
