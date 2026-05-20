@@ -17,6 +17,18 @@ const upload = multer({
 
 router.use(authMiddleware);
 
+async function deleteR2Object(r2, key) {
+  if (!key) {
+    return;
+  }
+
+  await r2.client.send(new DeleteObjectCommand({ Bucket: r2.bucket, Key: key }));
+}
+
+function isUserPdfKey(userId, key) {
+  return typeof key === "string" && key.startsWith(`${userId}/plans/`);
+}
+
 router.post("/plans/:planId", upload.single("pdf"), async (req, res, next) => {
   try {
     const r2 = getR2Config();
@@ -46,12 +58,9 @@ router.post("/plans/:planId", upload.single("pdf"), async (req, res, next) => {
       return res.status(404).json({ error: "Scheda non trovata" });
     }
 
-    if (plan.cloudPdf?.key) {
-      await r2.client.send(new DeleteObjectCommand({ Bucket: r2.bucket, Key: plan.cloudPdf.key })).catch(() => {});
-    }
-
     const updatedAt = new Date().toISOString();
     const key = `${req.user._id}/plans/${plan.id}/${Date.now()}-${req.file.originalname.replace(/[^a-z0-9_.-]/gi, "_")}`;
+    const previousPdfKey = plan.cloudPdf?.key;
 
     await r2.client.send(
       new PutObjectCommand({
@@ -66,6 +75,15 @@ router.post("/plans/:planId", upload.single("pdf"), async (req, res, next) => {
         }
       })
     );
+
+    if (previousPdfKey) {
+      try {
+        await deleteR2Object(r2, previousPdfKey);
+      } catch (err) {
+        await deleteR2Object(r2, key).catch(() => {});
+        return next(err);
+      }
+    }
 
     plan.cloudPdf = {
       key,
@@ -118,16 +136,31 @@ router.delete("/plans/:planId", async (req, res, next) => {
       return res.status(503).json({ error: "Storage PDF non configurato" });
     }
 
+    const fallbackKey = req.body?.cloudPdfKey;
     const gymData = await GymData.findOne({ userId: req.user._id });
     const plan = gymData?.data?.plans?.find((candidate) => candidate.id === req.params.planId);
 
     if (!gymData || !plan) {
+      if (isUserPdfKey(req.user._id, fallbackKey)) {
+        await deleteR2Object(r2, fallbackKey);
+        return res.json({ ok: true, updatedAt: gymData?.updatedAt ?? null });
+      }
+
       return res.status(404).json({ error: "Scheda non trovata" });
     }
 
-    if (plan.cloudPdf?.key) {
-      await r2.client.send(new DeleteObjectCommand({ Bucket: r2.bucket, Key: plan.cloudPdf.key })).catch(() => {});
+    const deleteKey = plan.cloudPdf?.key ?? (isUserPdfKey(req.user._id, fallbackKey) ? fallbackKey : null);
+
+    if (!deleteKey) {
+      delete plan.cloudPdf;
+      plan.updatedAt = new Date().toISOString();
+      gymData.markModified("data");
+      await gymData.save();
+
+      return res.json({ ok: true, updatedAt: gymData.updatedAt });
     }
+
+    await deleteR2Object(r2, deleteKey);
 
     delete plan.cloudPdf;
     plan.updatedAt = new Date().toISOString();

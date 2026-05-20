@@ -102,6 +102,10 @@ export function getPlanPdf(token, planId) {
   return requestArrayBuffer(`/api/pdf/plans/${encodeURIComponent(planId)}`, { token });
 }
 
-export function deletePlanPdf(token, planId) {
-  return request(`/api/pdf/plans/${encodeURIComponent(planId)}`, { method: "DELETE", token });
+export function deletePlanPdf(token, planId, cloudPdfKey) {
+  return request(`/api/pdf/plans/${encodeURIComponent(planId)}`, {
+    method: "DELETE",
+    token,
+    body: cloudPdfKey ? { cloudPdfKey } : undefined
+  });
 }

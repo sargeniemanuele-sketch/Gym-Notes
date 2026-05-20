@@ -220,6 +220,14 @@ function App() {
     }
   }
 
+  async function flushRequiredCloudSave() {
+    await flushCloudSave();
+
+    if (pendingCloudDataRef.current) {
+      throw new Error("Cloud non disponibile. Riprova tra poco.");
+    }
+  }
+
   function persistNextActivePlan(nextPlan) {
     if (!gymData) {
       return;
@@ -605,15 +613,21 @@ function App() {
     showSavedStatus("Scheda eliminata");
 
     if (hasPlanPdf(planToDelete)) {
-      Promise.all([
-        planToDelete.pdfId ? deletePdfFile(planToDelete.pdfId) : Promise.resolve(),
-        deletePlanPdfReference(planToDelete.id),
-        planToDelete.cloudPdf ? deletePlanPdf(auth?.token, planToDelete.id) : Promise.resolve()
-      ])
+      Promise.resolve()
+        .then(() => flushRequiredCloudSave())
+        .then(() =>
+          Promise.all([
+            planToDelete.pdfId ? deletePdfFile(planToDelete.pdfId) : Promise.resolve(),
+            deletePlanPdfReference(planToDelete.id),
+            planToDelete.cloudPdf
+              ? deletePlanPdf(auth?.token, planToDelete.id, planToDelete.cloudPdf.key)
+              : Promise.resolve()
+          ])
+        )
+        .then(() => scheduleCloudSave(nextData))
         .catch(() => {
-          setSaveWarning("La scheda è stata eliminata, ma non è stato possibile rimuovere il PDF.");
-        })
-        .finally(() => scheduleCloudSave(nextData));
+          setSaveWarning("La scheda è stata rimossa dalla vista, ma il PDF non è stato cancellato dal cloud. Riprova.");
+        });
     } else {
       scheduleCloudSave(nextData);
     }
@@ -853,7 +867,6 @@ function App() {
     }
 
     const pdfIds = [...new Set(plans.map((plan) => plan.pdfId).filter(Boolean))];
-    const cloudPdfPlanIds = plans.filter((plan) => plan.cloudPdf).map((plan) => plan.id);
 
     const nextData = { activePlanId: null, plans: [] };
     applyGymData(nextData);
@@ -876,15 +889,21 @@ function App() {
     setSaveWarning("");
 
     if (pdfIds.length > 0 || plans.length > 0) {
-      Promise.all([
-        ...pdfIds.map((pdfId) => deletePdfFile(pdfId)),
-        ...plans.map((plan) => deletePlanPdfReference(plan.id)),
-        ...cloudPdfPlanIds.map((planId) => deletePlanPdf(auth?.token, planId))
-      ])
+      Promise.resolve()
+        .then(() => flushRequiredCloudSave())
+        .then(() =>
+          Promise.all([
+            ...pdfIds.map((pdfId) => deletePdfFile(pdfId)),
+            ...plans.map((plan) => deletePlanPdfReference(plan.id)),
+            ...plans
+              .filter((plan) => plan.cloudPdf)
+              .map((plan) => deletePlanPdf(auth?.token, plan.id, plan.cloudPdf.key))
+          ])
+        )
+        .then(() => scheduleCloudSave(nextData))
         .catch(() => {
-          setSaveWarning("I dati sono stati cancellati, ma non è stato possibile rimuovere tutti i PDF.");
-        })
-        .finally(() => scheduleCloudSave(nextData));
+          setSaveWarning("I dati sono stati rimossi dalla vista, ma non tutti i PDF sono stati cancellati dal cloud. Riprova.");
+        });
     } else {
       scheduleCloudSave(nextData);
     }
@@ -912,7 +931,7 @@ function App() {
     const pdfUpdatedAt = new Date().toISOString();
 
     try {
-      await flushCloudSave();
+      await flushRequiredCloudSave();
       const uploadResult = await uploadPlanPdf(auth?.token, activePlan.id, file);
       const cloudPdf = uploadResult.cloudPdf;
       const localPdfId = cloudPdf?.key ?? pdfId;
@@ -963,13 +982,14 @@ function App() {
     }
 
     try {
-      await deletePlanPdf(auth?.token, activePlan.id);
+      await flushRequiredCloudSave();
+      await deletePlanPdf(auth?.token, activePlan.id, activePlan.cloudPdf?.key);
       if (activePlan.pdfId) {
         await deletePdfFile(activePlan.pdfId);
       }
       await deletePlanPdfReference(activePlan.id);
-    } catch {
-      setPdfError("Non è stato possibile rimuovere il PDF.");
+    } catch (err) {
+      setPdfError(err?.message ?? "Non è stato possibile rimuovere il PDF.");
       return;
     }
 
