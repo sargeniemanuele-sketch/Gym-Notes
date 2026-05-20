@@ -8,6 +8,7 @@ function WorkoutDetail({
   activePlan,
   activeSession,
   activeTimer,
+  authToken,
   editingWorkoutId,
   exerciseDraft,
   exerciseError,
@@ -111,7 +112,7 @@ function WorkoutDetail({
           workout={selectedWorkout}
         />
 
-        {activePlan.pdfId && (
+        {(activePlan.pdfId || activePlan.cloudPdf?.key) && (
           <section className="content-section" aria-labelledby="pdf-reference-title">
             <div className="section-title-row">
               <h2 id="pdf-reference-title">Riferimento PDF</h2>
@@ -120,11 +121,14 @@ function WorkoutDetail({
 
             <PdfReferenceSection
               isVisible={isPdfVisible}
+              authToken={authToken}
+              cloudPdf={activePlan.cloudPdf}
               onHide={onHidePdf}
               onPageChange={(pageNumber) => onWorkoutPdfPageChange(selectedWorkout.id, pageNumber)}
               onShow={onShowPdf}
+              planId={activePlan.id}
               pdfId={activePlan.pdfId}
-              pdfName={activePlan.pdfName}
+              pdfName={activePlan.cloudPdf?.name ?? activePlan.pdfName}
               selectedPage={selectedWorkout.pdfPage}
             />
           </section>

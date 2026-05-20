@@ -1,6 +1,9 @@
 import React from "react";
 
 function PdfHomeSection({ activePlan, onFileChange, onOpenFilePicker, onRemovePdf, pdfError, pdfInputRef, saveStatus }) {
+  const hasPdf = activePlan.pdfId || activePlan.cloudPdf?.key;
+  const pdfName = activePlan.cloudPdf?.name ?? activePlan.pdfName;
+
   return (
     <section className="content-section pdf-support-section" aria-labelledby="original-pdf-title">
       <div className="section-title-row">
@@ -9,10 +12,10 @@ function PdfHomeSection({ activePlan, onFileChange, onOpenFilePicker, onRemovePd
       </div>
 
       <div className="pdf-home-card">
-        {activePlan.pdfId ? (
+        {hasPdf ? (
           <div className="pdf-file-copy">
             <span>PDF caricato</span>
-            <p>{activePlan.pdfName}</p>
+            <p>{pdfName}</p>
           </div>
         ) : (
           <p>Nessun PDF caricato</p>
@@ -28,9 +31,9 @@ function PdfHomeSection({ activePlan, onFileChange, onOpenFilePicker, onRemovePd
 
         <div className="pdf-actions">
           <button type="button" onClick={onOpenFilePicker}>
-            {activePlan.pdfId ? "Sostituisci" : "Carica PDF"}
+            {hasPdf ? "Sostituisci" : "Carica PDF"}
           </button>
-          {activePlan.pdfId && (
+          {hasPdf && (
             <button className="outline-danger-button pdf-danger-button" type="button" onClick={onRemovePdf}>
               Rimuovi
             </button>

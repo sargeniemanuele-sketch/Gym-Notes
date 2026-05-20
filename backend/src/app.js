@@ -8,6 +8,7 @@ const errorHandler = require("./middleware/errorHandler");
 const healthRoutes = require("./routes/health.routes");
 const authRoutes = require("./routes/auth.routes");
 const syncRoutes = require("./routes/sync.routes");
+const pdfRoutes = require("./routes/pdf.routes");
 
 const app = express();
 
@@ -28,6 +29,7 @@ app.use(express.json({ limit: "2mb" }));
 app.use("/api/health", healthRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/sync", syncRoutes);
+app.use("/api/pdf", pdfRoutes);
 
 app.use(errorHandler);
 

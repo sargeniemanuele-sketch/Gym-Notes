@@ -16,7 +16,15 @@ import { createId, normalizeGymData } from "./storage.js";
 import { getTodayLabel } from "./utils/formatters.js";
 import { normalizeNumericInputValue } from "./utils/numbers.js";
 import { clearAuth, loadAuth, saveAuth } from "./authStorage.js";
-import { login as apiLogin, register as apiRegister, getMe, getRemoteGymData, saveRemoteGymData } from "./api/client.js";
+import {
+  deletePlanPdf,
+  getMe,
+  getRemoteGymData,
+  login as apiLogin,
+  register as apiRegister,
+  saveRemoteGymData,
+  uploadPlanPdf
+} from "./api/client.js";
 import { sanitizeForCloud } from "./utils/sanitizeForCloud.js";
 import AuthScreen from "./components/AuthScreen.jsx";
 
@@ -60,6 +68,7 @@ function App() {
   const sessionFeedbackTimeoutRef = useRef(null);
   const cloudSaveTimerRef = useRef(null);
   const cloudSaveInFlightRef = useRef(false);
+  const cloudSavePromiseRef = useRef(null);
   const pendingCloudDataRef = useRef(null);
   const cloudSaveTokenRef = useRef(null);
   const isCompletingSessionRef = useRef(false);
@@ -81,10 +90,10 @@ function App() {
   }, []);
 
   useEffect(() => {
-    if (selectedWorkoutId && activePlan?.pdfId) {
+    if (selectedWorkoutId && hasPlanPdf(activePlan)) {
       setIsPdfVisible(true);
     }
-  }, [activePlan?.pdfId, selectedWorkoutId]);
+  }, [activePlan?.cloudPdf?.key, activePlan?.pdfId, selectedWorkoutId]);
 
   useEffect(() => {
     if (activeTimer?.status !== "running") {
@@ -156,7 +165,7 @@ function App() {
 
   async function flushCloudSave() {
     if (cloudSaveInFlightRef.current) {
-      return;
+      return cloudSavePromiseRef.current;
     }
 
     const token = cloudSaveTokenRef.current;
@@ -170,7 +179,8 @@ function App() {
     cloudSaveInFlightRef.current = true;
 
     try {
-      await saveRemoteGymData(token, sanitizeForCloud(nextData));
+      cloudSavePromiseRef.current = saveRemoteGymData(token, sanitizeForCloud(nextData));
+      await cloudSavePromiseRef.current;
       setSaveWarning((current) =>
         current.startsWith("Cloud non disponibile") ? "" : current
       );
@@ -186,6 +196,7 @@ function App() {
       setSaveWarning("Cloud non disponibile. Le modifiche restano in memoria e verranno risincronizzate più avanti.");
     } finally {
       cloudSaveInFlightRef.current = false;
+      cloudSavePromiseRef.current = null;
     }
 
     if (pendingCloudDataRef.current) {
@@ -283,6 +294,7 @@ function App() {
     }
     pendingCloudDataRef.current = null;
     cloudSaveTokenRef.current = null;
+    cloudSavePromiseRef.current = null;
 
     clearAuth();
     setAuth(null);
@@ -555,10 +567,12 @@ function App() {
     const nextActivePlanId =
       gymData?.activePlanId === planId ? nextPlans[0]?.id ?? null : gymData?.activePlanId ?? nextPlans[0]?.id ?? null;
 
-    persistNextData({
+    const nextData = {
       activePlanId: nextActivePlanId,
       plans: nextPlans
-    });
+    };
+
+    applyGymData(nextData);
 
     if (activePlan?.id === planId) {
       setIsPlanOpen(false);
@@ -574,10 +588,18 @@ function App() {
     setSaveWarning("");
     showSavedStatus("Scheda eliminata");
 
-    if (planToDelete.pdfId) {
-      Promise.all([deletePdfFile(planToDelete.pdfId), deletePlanPdfReference(planToDelete.id)]).catch(() => {
-        setSaveWarning("La scheda è stata eliminata, ma non è stato possibile rimuovere il PDF da IndexedDB.");
-      });
+    if (hasPlanPdf(planToDelete)) {
+      Promise.all([
+        planToDelete.pdfId ? deletePdfFile(planToDelete.pdfId) : Promise.resolve(),
+        deletePlanPdfReference(planToDelete.id),
+        planToDelete.cloudPdf ? deletePlanPdf(auth?.token, planToDelete.id) : Promise.resolve()
+      ])
+        .catch(() => {
+          setSaveWarning("La scheda è stata eliminata, ma non è stato possibile rimuovere il PDF.");
+        })
+        .finally(() => scheduleCloudSave(nextData));
+    } else {
+      scheduleCloudSave(nextData);
     }
   }
 
@@ -815,8 +837,10 @@ function App() {
     }
 
     const pdfIds = [...new Set(plans.map((plan) => plan.pdfId).filter(Boolean))];
+    const cloudPdfPlanIds = plans.filter((plan) => plan.cloudPdf).map((plan) => plan.id);
 
-    persistNextData({ activePlanId: null, plans: [] });
+    const nextData = { activePlanId: null, plans: [] };
+    applyGymData(nextData);
     setIsPlanOpen(false);
     setIsNewPlanFormOpen(false);
     setIsRenamingPlan(false);
@@ -838,10 +862,15 @@ function App() {
     if (pdfIds.length > 0 || plans.length > 0) {
       Promise.all([
         ...pdfIds.map((pdfId) => deletePdfFile(pdfId)),
-        ...plans.map((plan) => deletePlanPdfReference(plan.id))
-      ]).catch(() => {
-        setSaveWarning("I dati sono stati cancellati, ma non è stato possibile rimuovere tutti i PDF da IndexedDB.");
-      });
+        ...plans.map((plan) => deletePlanPdfReference(plan.id)),
+        ...cloudPdfPlanIds.map((planId) => deletePlanPdf(auth?.token, planId))
+      ])
+        .catch(() => {
+          setSaveWarning("I dati sono stati cancellati, ma non è stato possibile rimuovere tutti i PDF.");
+        })
+        .finally(() => scheduleCloudSave(nextData));
+    } else {
+      scheduleCloudSave(nextData);
     }
   }
 
@@ -867,7 +896,11 @@ function App() {
     const pdfUpdatedAt = new Date().toISOString();
 
     try {
-      await savePdfFile(pdfId, file);
+      await flushCloudSave();
+      const uploadResult = await uploadPlanPdf(auth?.token, activePlan.id, file);
+      const cloudPdf = uploadResult.cloudPdf;
+      const localPdfId = cloudPdf?.key ?? pdfId;
+      await savePdfFile(localPdfId, file);
 
       if (activePlan.pdfId) {
         try {
@@ -879,30 +912,31 @@ function App() {
 
       const nextPlan = {
         ...activePlan,
-        pdfId,
+        cloudPdf,
+        pdfId: localPdfId,
         pdfName: file.name,
         pdfSize: file.size,
-        pdfUpdatedAt,
+        pdfUpdatedAt: cloudPdf?.updatedAt ?? pdfUpdatedAt,
         updatedAt: pdfUpdatedAt
       };
 
       await savePlanPdfReference(activePlan.id, {
-        pdfId,
+        pdfId: localPdfId,
         pdfName: file.name,
         pdfSize: file.size,
-        pdfUpdatedAt
+        pdfUpdatedAt: cloudPdf?.updatedAt ?? pdfUpdatedAt
       });
 
       persistNextActivePlan(nextPlan);
       showSavedStatus("PDF salvato sul dispositivo");
     } catch {
       deletePdfFile(pdfId).catch(() => {});
-      setPdfError("Non è stato possibile salvare il PDF su questo dispositivo.");
+      setPdfError("Non è stato possibile salvare il PDF.");
     }
   }
 
   async function handleRemovePdf() {
-    if (!activePlan?.pdfId) {
+    if (!hasPlanPdf(activePlan)) {
       return;
     }
 
@@ -913,14 +947,17 @@ function App() {
     }
 
     try {
-      await deletePdfFile(activePlan.pdfId);
+      await deletePlanPdf(auth?.token, activePlan.id);
+      if (activePlan.pdfId) {
+        await deletePdfFile(activePlan.pdfId);
+      }
       await deletePlanPdfReference(activePlan.id);
     } catch {
-      setPdfError("Non è stato possibile rimuovere il PDF da IndexedDB.");
+      setPdfError("Non è stato possibile rimuovere il PDF.");
       return;
     }
 
-    const { pdfId, pdfName, pdfSize, pdfUpdatedAt, ...planWithoutPdf } = activePlan;
+    const { cloudPdf, pdfId, pdfName, pdfSize, pdfUpdatedAt, ...planWithoutPdf } = activePlan;
     const nextPlan = {
       ...planWithoutPdf,
       updatedAt: new Date().toISOString()
@@ -1099,6 +1136,7 @@ function App() {
         <PlanList
           auth={auth}
           hasTimerBar={!!activeTimer}
+          authToken={auth?.token}
           isNewPlanFormOpen={isNewPlanFormOpen}
           onCancelCreatePlan={handleCancelCreatePlan}
           onCreatePlan={handleCreatePlan}
@@ -1219,6 +1257,10 @@ function normalizeRemoteData(data) {
   return normalizeGymData(data ?? { activePlanId: null, plans: [] });
 }
 
+function hasPlanPdf(plan) {
+  return !!(plan?.cloudPdf?.key || plan?.pdfId);
+}
+
 async function mergeLocalPdfReferences(data) {
   try {
     const references = await getAllPlanPdfReferences();
@@ -1229,7 +1271,7 @@ async function mergeLocalPdfReferences(data) {
       plans: data.plans.map((plan) => {
         const reference = referencesByPlanId.get(plan.id);
 
-        if (!reference?.pdfId) {
+        if (!reference?.pdfId || plan.cloudPdf?.key) {
           return plan;
         }
 

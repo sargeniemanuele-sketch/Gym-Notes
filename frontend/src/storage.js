@@ -61,8 +61,23 @@ function normalizePlan(data) {
     pdfName: typeof data.pdfName === "string" ? data.pdfName : undefined,
     pdfSize: typeof data.pdfSize === "number" ? data.pdfSize : undefined,
     pdfUpdatedAt: typeof data.pdfUpdatedAt === "string" ? data.pdfUpdatedAt : undefined,
+    cloudPdf: normalizeCloudPdf(data.cloudPdf),
     workouts: Array.isArray(data.workouts) ? data.workouts.filter(isObject).map(normalizeWorkout) : [],
     sessions: Array.isArray(data.sessions) ? data.sessions.filter(isObject).map(normalizeSession) : []
+  };
+}
+
+function normalizeCloudPdf(cloudPdf) {
+  if (!cloudPdf || typeof cloudPdf !== "object" || typeof cloudPdf.key !== "string") {
+    return undefined;
+  }
+
+  return {
+    key: cloudPdf.key,
+    name: typeof cloudPdf.name === "string" ? cloudPdf.name : "scheda.pdf",
+    size: typeof cloudPdf.size === "number" ? cloudPdf.size : undefined,
+    contentType: typeof cloudPdf.contentType === "string" ? cloudPdf.contentType : "application/pdf",
+    updatedAt: typeof cloudPdf.updatedAt === "string" ? cloudPdf.updatedAt : undefined
   };
 }
 

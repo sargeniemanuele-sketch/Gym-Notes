@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from "react";
 import * as pdfjsLib from "pdfjs-dist";
+import { getPlanPdf } from "../api/client.js";
 import { getPdfFile } from "../pdfStorage.js";
 import PdfPageViewer from "./PdfPageViewer.jsx";
 
-function PdfReferenceSection({ isVisible, onHide, onPageChange, onShow, pdfId, pdfName, selectedPage }) {
+function PdfReferenceSection({ authToken, cloudPdf, isVisible, onHide, onPageChange, onShow, pdfId, pdfName, planId, selectedPage }) {
   const [pdfData, setPdfData] = useState(null);
   const [numPages, setNumPages] = useState(null);
   const [referenceStatus, setReferenceStatus] = useState("loading");
@@ -24,13 +25,19 @@ function PdfReferenceSection({ isVisible, onHide, onPageChange, onShow, pdfId, p
       setNumPages(null);
 
       try {
-        const savedPdf = await getPdfFile(pdfId);
+        const savedPdf = pdfId ? await getPdfFile(pdfId) : null;
+        let arrayBuffer = null;
 
-        if (!savedPdf?.file) {
+        if (savedPdf?.file) {
+          arrayBuffer = await savedPdf.file.arrayBuffer();
+        } else if (cloudPdf?.key && authToken && planId) {
+          arrayBuffer = await getPlanPdf(authToken, planId);
+        }
+
+        if (!arrayBuffer) {
           throw new Error("missing-pdf");
         }
 
-        const arrayBuffer = await savedPdf.file.arrayBuffer();
         loadingTask = pdfjsLib.getDocument({ data: new Uint8Array(arrayBuffer.slice(0)) });
         const pdfDocument = await loadingTask.promise;
         const totalPages = pdfDocument.numPages;
@@ -62,7 +69,7 @@ function PdfReferenceSection({ isVisible, onHide, onPageChange, onShow, pdfId, p
         loadingTask.destroy();
       }
     };
-  }, [pdfId]);
+  }, [authToken, cloudPdf?.key, pdfId, planId]);
 
   useEffect(() => {
     if (!numPages) {
