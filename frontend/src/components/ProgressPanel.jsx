@@ -6,6 +6,41 @@ function normalizeKey(name) {
   return (name ?? "").trim().toLowerCase().replace(/\s+/g, " ");
 }
 
+function parsePositiveNumber(value) {
+  const str = typeof value === "string" ? value.trim().replace(",", ".") : "";
+
+  if (!str) {
+    return null;
+  }
+
+  const n = Number(str);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+function buildEntry(session, ex) {
+  const weight = parseNumericWeight(ex.weight);
+  const reps = parsePositiveNumber(ex.reps);
+  const completedSets = ex.completedSets ?? 0;
+  const volume =
+    completedSets > 0 && reps !== null && weight !== null
+      ? completedSets * reps * weight
+      : null;
+
+  return {
+    date: session.completedAt,
+    workoutName: session.workoutName,
+    durationSeconds: session.durationSeconds,
+    weight: ex.weight,
+    numericWeight: weight,
+    completedSets,
+    sets: ex.sets,
+    reps: ex.reps,
+    numericReps: reps,
+    volume,
+    notes: ex.notes
+  };
+}
+
 function buildExerciseProgress(sessions) {
   const sorted = [...sessions].sort(
     (a, b) => new Date(b.completedAt).getTime() - new Date(a.completedAt).getTime()
@@ -21,14 +56,14 @@ function buildExerciseProgress(sessions) {
         continue;
       }
 
-      const weight = parseNumericWeight(ex.weight);
+      const entry = buildEntry(session, ex);
 
       if (!groups.has(key)) {
         groups.set(key, {
           key,
           displayName: ex.name?.trim() || key,
-          lastWeight: weight,
-          bestWeight: weight,
+          lastWeight: entry.numericWeight,
+          bestWeight: entry.numericWeight,
           sessionCount: 1,
           lastDate: session.completedAt,
           history: []
@@ -37,26 +72,22 @@ function buildExerciseProgress(sessions) {
         const group = groups.get(key);
         group.sessionCount += 1;
 
-        if (weight !== null && (group.bestWeight === null || weight > group.bestWeight)) {
-          group.bestWeight = weight;
+        if (entry.numericWeight !== null && (group.bestWeight === null || entry.numericWeight > group.bestWeight)) {
+          group.bestWeight = entry.numericWeight;
         }
       }
 
-      groups.get(key).history.push({
-        date: session.completedAt,
-        workoutName: session.workoutName,
-        weight: ex.weight,
-        completedSets: ex.completedSets ?? 0,
-        sets: ex.sets,
-        reps: ex.reps,
-        notes: ex.notes
-      });
+      groups.get(key).history.push(entry);
     }
   }
 
-  return Array.from(groups.values()).sort(
-    (a, b) => new Date(b.lastDate).getTime() - new Date(a.lastDate).getTime()
-  );
+  return Array.from(groups.values())
+    .map((group) => ({
+      ...group,
+      lastEntry: group.history[0] ?? null,
+      previousEntry: group.history[1] ?? null
+    }))
+    .sort((a, b) => new Date(b.lastDate).getTime() - new Date(a.lastDate).getTime());
 }
 
 const emptyState = (
