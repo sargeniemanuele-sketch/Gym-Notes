@@ -4,25 +4,18 @@ const USER_KEY = "gym-notes-auth-user-v1";
 export function loadAuth() {
   try {
     const token = localStorage.getItem(TOKEN_KEY);
-    const userRaw = localStorage.getItem(USER_KEY);
-    if (!token || !userRaw) return null;
-    const user = JSON.parse(userRaw);
-
-    if (!user || typeof user !== "object" || typeof user.email !== "string") {
-      clearAuth();
-      return null;
-    }
-
-    return { token, user };
+    if (!token) return null;
+    localStorage.removeItem(USER_KEY);
+    return { token, user: null };
   } catch {
     clearAuth();
     return null;
   }
 }
 
-export function saveAuth({ token, user }) {
+export function saveAuth({ token }) {
   localStorage.setItem(TOKEN_KEY, token);
-  localStorage.setItem(USER_KEY, JSON.stringify(user));
+  localStorage.removeItem(USER_KEY);
 }
 
 export function clearAuth() {

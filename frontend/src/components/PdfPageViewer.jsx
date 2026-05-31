@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import * as pdfjsLib from "pdfjs-dist";
+import { loadPdfJs } from "../utils/pdfjs.js";
 
 function PdfPageViewer({ pageNumber, pdfData }) {
   const canvasRef = useRef(null);
@@ -21,6 +21,7 @@ function PdfPageViewer({ pageNumber, pdfData }) {
           throw new Error("missing-pdf-data");
         }
 
+        const pdfjsLib = await loadPdfJs();
         loadingTask = pdfjsLib.getDocument({ data: new Uint8Array(pdfData.slice(0)) });
         const pdfDocument = await loadingTask.promise;
 

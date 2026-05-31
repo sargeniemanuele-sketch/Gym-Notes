@@ -4,6 +4,10 @@ export function mergeGymData(remoteData, localData) {
   const remote = normalizeGymData(remoteData ?? { activePlanId: null, plans: [] });
   const local = normalizeGymData(localData ?? { activePlanId: null, plans: [] });
   const deletedPlanIds = mergeDeletedIds(remote.deletedPlanIds, local.deletedPlanIds);
+  const completedActiveSessionIds = mergeDeletedIds(
+    remote.completedActiveSessionIds,
+    local.completedActiveSessionIds
+  );
   const resetAt = getNewerOptionalDate(remote.resetAt, local.resetAt);
   const plansById = new Map(remote.plans.map((plan) => [plan.id, plan]));
 
@@ -15,9 +19,12 @@ export function mergeGymData(remoteData, localData) {
   const plans = filterDeletedItems(Array.from(plansById.values()), deletedPlanIds, resetAt);
   const localActivePlanExists = plans.some((plan) => plan.id === local.activePlanId);
   const remoteActivePlanExists = plans.some((plan) => plan.id === remote.activePlanId);
+  const activeSessionFields = getMergedActiveSessionFields(remote, local, plans, completedActiveSessionIds);
 
   return normalizeGymData({
     activePlanId: localActivePlanExists ? local.activePlanId : remoteActivePlanExists ? remote.activePlanId : plans[0]?.id ?? null,
+    ...activeSessionFields,
+    completedActiveSessionIds,
     deletedPlanIds,
     resetAt,
     plans
@@ -130,48 +137,82 @@ function filterDeletedItems(items, deletedIds, resetAt = undefined) {
 }
 
 function getMergedPdfFields(remotePlan, localPlan) {
-  const remoteHasPdf = hasPlanPdf(remotePlan);
-  const localHasPdf = hasPlanPdf(localPlan);
+  const pdfDeletedAt = getNewerOptionalDate(remotePlan.pdfDeletedAt, localPlan.pdfDeletedAt);
+  const pdfCandidates = [remotePlan, localPlan].filter(hasPlanPdf);
+  const newestPdfPlan = pdfCandidates.reduce((newest, plan) => {
+    if (!newest) return plan;
+    return getTimestamp(getPdfUpdatedAt(plan)) > getTimestamp(getPdfUpdatedAt(newest)) ? plan : newest;
+  }, null);
 
-  if (!remoteHasPdf && !localHasPdf) {
+  if (!newestPdfPlan) {
     return {
       cloudPdf: undefined,
-      pdfId: undefined,
-      pdfName: undefined,
-      pdfSize: undefined,
-      pdfUpdatedAt: undefined
+      pdfDeletedAt
     };
   }
 
-  if (!remoteHasPdf) {
-    return getPdfFields(localPlan);
+  if (pdfDeletedAt && getTimestamp(pdfDeletedAt) >= getTimestamp(getPdfUpdatedAt(newestPdfPlan))) {
+    return {
+      cloudPdf: undefined,
+      pdfDeletedAt
+    };
   }
 
-  if (!localHasPdf) {
-    return getPdfFields(remotePlan);
-  }
-
-  return getTimestamp(getPdfUpdatedAt(localPlan)) > getTimestamp(getPdfUpdatedAt(remotePlan))
-    ? getPdfFields(localPlan)
-    : getPdfFields(remotePlan);
+  return {
+    ...getPdfFields(newestPdfPlan),
+    pdfDeletedAt
+  };
 }
 
 function hasPlanPdf(plan) {
-  return !!(plan?.cloudPdf?.key || plan?.pdfId);
+  return !!plan?.cloudPdf?.key;
 }
 
 function getPdfFields(plan) {
   return {
     cloudPdf: plan.cloudPdf,
-    pdfId: plan.pdfId,
-    pdfName: plan.pdfName,
-    pdfSize: plan.pdfSize,
-    pdfUpdatedAt: plan.pdfUpdatedAt
+    pdfDeletedAt: plan.pdfDeletedAt
   };
 }
 
 function getPdfUpdatedAt(plan) {
-  return plan?.cloudPdf?.updatedAt ?? plan?.pdfUpdatedAt;
+  return plan?.cloudPdf?.updatedAt;
+}
+
+function getMergedActiveSessionFields(remote, local, plans, completedActiveSessionIds) {
+  const remoteTime = getActiveSessionEventTimestamp(remote);
+  const localTime = getActiveSessionEventTimestamp(local);
+  const winner = localTime > remoteTime ? local : remote;
+  const activeSession = isActiveSessionValid(winner.activeSession, plans, completedActiveSessionIds)
+    ? winner.activeSession
+    : null;
+  const activeSessionUpdatedAt = getNewerOptionalDate(remote.activeSessionUpdatedAt, local.activeSessionUpdatedAt);
+
+  return {
+    activeSession,
+    activeSessionUpdatedAt
+  };
+}
+
+function getActiveSessionEventTimestamp(data) {
+  return Math.max(
+    getTimestamp(data?.activeSessionUpdatedAt),
+    getTimestamp(data?.activeSession?.updatedAt),
+    getTimestamp(data?.activeSession?.startedAt)
+  );
+}
+
+function isActiveSessionValid(session, plans, completedActiveSessionIds = []) {
+  if (!session) {
+    return false;
+  }
+
+  if (completedActiveSessionIds.some((item) => item.id === session.id)) {
+    return false;
+  }
+
+  const plan = plans.find((candidate) => candidate.id === session.planId);
+  return !!plan?.workouts?.some((workout) => workout.id === session.workoutId);
 }
 
 function getOlderDate(firstDate, secondDate) {

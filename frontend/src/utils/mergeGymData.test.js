@@ -20,6 +20,11 @@ const baseWorkout = {
   exercises: []
 };
 
+const basePlanWithWorkout = {
+  ...basePlan,
+  workouts: [baseWorkout]
+};
+
 test("mergeGymData keeps completed sessions from both devices", () => {
   const remote = {
     activePlanId: "plan-1",
@@ -138,4 +143,166 @@ test("mergeGymData applies global reset to older plans", () => {
   const merged = mergeGymData(remote, local);
   assert.equal(merged.activePlanId, null);
   assert.equal(merged.plans.length, 0);
+});
+
+test("mergeGymData keeps the newest active session in the cloud model", () => {
+  const remote = {
+    activePlanId: "plan-1",
+    activeSession: {
+      planId: "plan-1",
+      workoutId: "workout-1",
+      startedAt: "2026-05-03T10:00:00.000Z",
+      updatedAt: "2026-05-03T10:05:00.000Z",
+      completedSetsByExercise: {
+        "exercise-1": [1]
+      }
+    },
+    activeSessionUpdatedAt: "2026-05-03T10:05:00.000Z",
+    plans: [basePlanWithWorkout]
+  };
+  const local = {
+    activePlanId: "plan-1",
+    activeSession: {
+      planId: "plan-1",
+      workoutId: "workout-1",
+      startedAt: "2026-05-03T10:00:00.000Z",
+      updatedAt: "2026-05-03T10:06:00.000Z",
+      completedSetsByExercise: {
+        "exercise-1": [1, 2]
+      }
+    },
+    activeSessionUpdatedAt: "2026-05-03T10:06:00.000Z",
+    plans: [basePlanWithWorkout]
+  };
+
+  const merged = mergeGymData(remote, local);
+  assert.deepEqual(merged.activeSession.completedSetsByExercise["exercise-1"], [1, 2]);
+});
+
+test("mergeGymData keeps the newest update for the same active session id", () => {
+  const remote = {
+    activePlanId: "plan-1",
+    activeSession: {
+      id: "active-1",
+      planId: "plan-1",
+      workoutId: "workout-1",
+      startedAt: "2026-05-03T10:00:00.000Z",
+      updatedAt: "2026-05-03T10:10:00.000Z",
+      completedSetsByExercise: {
+        "exercise-1": [1, 2, 3]
+      }
+    },
+    activeSessionUpdatedAt: "2026-05-03T10:10:00.000Z",
+    plans: [basePlanWithWorkout]
+  };
+  const local = {
+    activePlanId: "plan-1",
+    activeSession: {
+      id: "active-1",
+      planId: "plan-1",
+      workoutId: "workout-1",
+      startedAt: "2026-05-03T10:00:00.000Z",
+      updatedAt: "2026-05-03T10:06:00.000Z",
+      completedSetsByExercise: {
+        "exercise-1": [1]
+      }
+    },
+    activeSessionUpdatedAt: "2026-05-03T10:06:00.000Z",
+    plans: [basePlanWithWorkout]
+  };
+
+  const merged = mergeGymData(remote, local);
+  assert.equal(merged.activeSession.id, "active-1");
+  assert.deepEqual(merged.activeSession.completedSetsByExercise["exercise-1"], [1, 2, 3]);
+});
+
+test("mergeGymData does not resurrect a completed active session", () => {
+  const remote = {
+    activePlanId: "plan-1",
+    activeSession: {
+      id: "active-1",
+      planId: "plan-1",
+      workoutId: "workout-1",
+      startedAt: "2026-05-03T10:00:00.000Z",
+      updatedAt: "2026-05-03T10:06:00.000Z",
+      completedSetsByExercise: {
+        "exercise-1": [1, 2]
+      }
+    },
+    activeSessionUpdatedAt: "2026-05-03T10:06:00.000Z",
+    plans: [basePlanWithWorkout]
+  };
+  const local = {
+    activePlanId: "plan-1",
+    activeSession: null,
+    activeSessionUpdatedAt: "2026-05-03T10:08:00.000Z",
+    completedActiveSessionIds: [{ id: "active-1", deletedAt: "2026-05-03T10:08:00.000Z" }],
+    plans: [basePlanWithWorkout]
+  };
+
+  const merged = mergeGymData(remote, local);
+  assert.equal(merged.activeSession, null);
+  assert.deepEqual(merged.completedActiveSessionIds, [
+    { id: "active-1", deletedAt: "2026-05-03T10:08:00.000Z" }
+  ]);
+});
+
+test("mergeGymData does not resurrect a PDF deleted after it was uploaded", () => {
+  const remote = {
+    activePlanId: "plan-1",
+    plans: [
+      {
+        ...basePlan,
+        pdfDeletedAt: "2026-05-03T10:00:00.000Z"
+      }
+    ]
+  };
+  const local = {
+    activePlanId: "plan-1",
+    plans: [
+      {
+        ...basePlan,
+        cloudPdf: {
+          key: "user-1/plans/plan-1/old.pdf",
+          name: "old.pdf",
+          contentType: "application/pdf",
+          updatedAt: "2026-05-03T09:00:00.000Z"
+        }
+      }
+    ]
+  };
+
+  const merged = mergeGymData(remote, local);
+  assert.equal(merged.plans[0].cloudPdf, undefined);
+  assert.equal(merged.plans[0].pdfDeletedAt, "2026-05-03T10:00:00.000Z");
+});
+
+test("mergeGymData keeps a new PDF uploaded after a deletion", () => {
+  const remote = {
+    activePlanId: "plan-1",
+    plans: [
+      {
+        ...basePlan,
+        pdfDeletedAt: "2026-05-03T10:00:00.000Z"
+      }
+    ]
+  };
+  const local = {
+    activePlanId: "plan-1",
+    plans: [
+      {
+        ...basePlan,
+        cloudPdf: {
+          key: "user-1/plans/plan-1/new.pdf",
+          name: "new.pdf",
+          contentType: "application/pdf",
+          updatedAt: "2026-05-03T10:10:00.000Z"
+        },
+        pdfDeletedAt: "2026-05-03T10:00:00.000Z"
+      }
+    ]
+  };
+
+  const merged = mergeGymData(remote, local);
+  assert.equal(merged.plans[0].cloudPdf.key, "user-1/plans/plan-1/new.pdf");
 });

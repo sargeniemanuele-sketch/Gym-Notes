@@ -1,126 +1,9 @@
 export function createId() {
-  if (window.crypto && typeof window.crypto.randomUUID === "function") {
-    return window.crypto.randomUUID();
+  if (globalThis.crypto && typeof globalThis.crypto.randomUUID === "function") {
+    return globalThis.crypto.randomUUID();
   }
 
   return `${Date.now().toString()}-${Math.random().toString(16).slice(2)}`;
-}
-
-const DATA_CACHE_PREFIX = "gym-notes-data-cache-v1:";
-const ACTIVE_SESSION_PREFIX = "gym-notes-active-session-v1:";
-
-function getUserKey(user) {
-  const userId = typeof user?.id === "string" ? user.id : user?.email;
-
-  if (!userId) {
-    return null;
-  }
-
-  return userId;
-}
-
-function getUserCacheKey(user) {
-  const userKey = getUserKey(user);
-  return userKey ? `${DATA_CACHE_PREFIX}${userKey}` : null;
-}
-
-function getActiveSessionKey(user) {
-  const userKey = getUserKey(user);
-  return userKey ? `${ACTIVE_SESSION_PREFIX}${userKey}` : null;
-}
-
-export function loadGymDataCache(user) {
-  try {
-    const key = getUserCacheKey(user);
-
-    if (!key) {
-      return null;
-    }
-
-    const raw = localStorage.getItem(key);
-
-    if (!raw) {
-      return null;
-    }
-
-    const parsed = JSON.parse(raw);
-
-    if (!parsed || typeof parsed !== "object") {
-      return null;
-    }
-
-    return {
-      data: normalizeGymData(parsed.data),
-      hasPendingChanges: parsed.hasPendingChanges === true,
-      remoteUpdatedAt: typeof parsed.remoteUpdatedAt === "string" ? parsed.remoteUpdatedAt : null,
-      savedAt: typeof parsed.savedAt === "string" ? parsed.savedAt : null
-    };
-  } catch {
-    return null;
-  }
-}
-
-export function loadActiveSessionCache(user) {
-  try {
-    const key = getActiveSessionKey(user);
-
-    if (!key) {
-      return null;
-    }
-
-    return normalizeActiveSession(JSON.parse(localStorage.getItem(key)));
-  } catch {
-    return null;
-  }
-}
-
-export function saveActiveSessionCache(user, session) {
-  try {
-    const key = getActiveSessionKey(user);
-    const normalizedSession = normalizeActiveSession(session);
-
-    if (!key || !normalizedSession) {
-      return;
-    }
-
-    localStorage.setItem(key, JSON.stringify(normalizedSession));
-  } catch {
-    // Active session recovery is best-effort; completed sessions still persist through gym data.
-  }
-}
-
-export function clearActiveSessionCache(user) {
-  try {
-    const key = getActiveSessionKey(user);
-
-    if (key) {
-      localStorage.removeItem(key);
-    }
-  } catch {
-    // Nothing to do if browser storage is unavailable.
-  }
-}
-
-export function saveGymDataCache(user, data, { hasPendingChanges = false, remoteUpdatedAt = null } = {}) {
-  try {
-    const key = getUserCacheKey(user);
-
-    if (!key) {
-      return;
-    }
-
-    localStorage.setItem(
-      key,
-      JSON.stringify({
-        data: normalizeGymData(data),
-        hasPendingChanges,
-        remoteUpdatedAt,
-        savedAt: new Date().toISOString()
-      })
-    );
-  } catch {
-    // If local storage is full or blocked, cloud sync still remains the source of truth.
-  }
 }
 
 export function normalizeGymData(data) {
@@ -132,9 +15,22 @@ export function normalizeGymData(data) {
     const plans = data.plans.filter(isObject).map(normalizePlan);
     const storedActivePlanId = typeof data.activePlanId === "string" ? data.activePlanId : null;
     const activePlanExists = plans.some((plan) => plan.id === storedActivePlanId);
+    const activeSession = normalizeActiveSession(data.activeSession);
+    const completedActiveSessionIds = normalizeDeletedIds(data.completedActiveSessionIds);
 
     return {
       activePlanId: activePlanExists ? storedActivePlanId : plans[0]?.id ?? null,
+      activeSession:
+        activeSession &&
+        isActiveSessionValid(activeSession, plans) &&
+        !isActiveSessionCompleted(activeSession, completedActiveSessionIds)
+          ? activeSession
+          : null,
+      activeSessionUpdatedAt:
+        typeof data.activeSessionUpdatedAt === "string"
+          ? data.activeSessionUpdatedAt
+          : activeSession?.updatedAt ?? activeSession?.startedAt,
+      completedActiveSessionIds,
       deletedPlanIds: normalizeDeletedIds(data.deletedPlanIds),
       resetAt: typeof data.resetAt === "string" ? data.resetAt : undefined,
       plans
@@ -148,6 +44,9 @@ export function normalizeGymData(data) {
   const migratedPlan = normalizePlan(data);
   return {
     activePlanId: migratedPlan.id,
+    activeSession: null,
+    activeSessionUpdatedAt: undefined,
+    completedActiveSessionIds: [],
     deletedPlanIds: [],
     resetAt: undefined,
     plans: [migratedPlan]
@@ -157,6 +56,9 @@ export function normalizeGymData(data) {
 function emptyGymData() {
   return {
     activePlanId: null,
+    activeSession: null,
+    activeSessionUpdatedAt: undefined,
+    completedActiveSessionIds: [],
     deletedPlanIds: [],
     resetAt: undefined,
     plans: []
@@ -180,10 +82,7 @@ function normalizePlan(data) {
     name: typeof data.name === "string" ? data.name : "Scheda",
     createdAt: planCreatedAt,
     updatedAt: typeof data.updatedAt === "string" ? data.updatedAt : planCreatedAt,
-    pdfId: typeof data.pdfId === "string" ? data.pdfId : undefined,
-    pdfName: typeof data.pdfName === "string" ? data.pdfName : undefined,
-    pdfSize: typeof data.pdfSize === "number" ? data.pdfSize : undefined,
-    pdfUpdatedAt: typeof data.pdfUpdatedAt === "string" ? data.pdfUpdatedAt : undefined,
+    pdfDeletedAt: typeof data.pdfDeletedAt === "string" ? data.pdfDeletedAt : undefined,
     cloudPdf: normalizeCloudPdf(data.cloudPdf),
     deletedWorkoutIds: normalizeDeletedIds(data.deletedWorkoutIds),
     workouts: Array.isArray(data.workouts) ? data.workouts.filter(isObject).map(normalizeWorkout) : [],
@@ -305,7 +204,7 @@ function normalizeDeletedIds(value) {
     }));
 }
 
-function normalizeActiveSession(session) {
+export function normalizeActiveSession(session) {
   if (
     !session ||
     typeof session !== "object" ||
@@ -317,11 +216,22 @@ function normalizeActiveSession(session) {
   }
 
   return {
+    id: typeof session.id === "string" ? session.id : createId(),
     planId: session.planId,
     workoutId: session.workoutId,
     startedAt: session.startedAt,
+    updatedAt: typeof session.updatedAt === "string" ? session.updatedAt : session.startedAt,
     completedSetsByExercise: normalizeCompletedSetsByExercise(session.completedSetsByExercise)
   };
+}
+
+function isActiveSessionValid(session, plans) {
+  const plan = plans.find((candidate) => candidate.id === session.planId);
+  return !!plan?.workouts?.some((workout) => workout.id === session.workoutId);
+}
+
+function isActiveSessionCompleted(session, completedActiveSessionIds) {
+  return completedActiveSessionIds.some((item) => item.id === session.id);
 }
 
 function normalizeCompletedSetsByExercise(value) {

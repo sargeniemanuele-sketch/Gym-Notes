@@ -3,7 +3,7 @@ import React from "react";
 function PlanCard({ onDelete, onDuplicate, onOpen, plan }) {
   const workoutCount = plan.workouts.length;
   const workoutLabel = workoutCount === 1 ? "1 allenamento" : `${workoutCount} allenamenti`;
-  const pdfLabel = plan.pdfId || plan.cloudPdf?.key ? "PDF caricato" : "Nessun PDF";
+  const pdfLabel = plan.cloudPdf?.key ? "PDF salvato nel cloud" : "Nessun PDF";
 
   return (
     <article className="plan-card">

@@ -1,8 +1,9 @@
-import React, { useEffect } from "react";
+import React, { Suspense, lazy, useEffect } from "react";
 import ExerciseCard from "./ExerciseCard.jsx";
 import ExerciseForm from "./ExerciseForm.jsx";
-import PdfReferenceSection from "./PdfReferenceSection.jsx";
 import WorkoutSessionControls from "./WorkoutSessionControls.jsx";
+
+const PdfReferenceSection = lazy(() => import("./PdfReferenceSection.jsx"));
 
 function WorkoutDetail({
   activePlan,
@@ -113,25 +114,26 @@ function WorkoutDetail({
           workout={selectedWorkout}
         />
 
-        {(activePlan.pdfId || activePlan.cloudPdf?.key) && (
+        {activePlan.cloudPdf?.key && (
           <section className="content-section" aria-labelledby="pdf-reference-title">
             <div className="section-title-row">
               <h2 id="pdf-reference-title">Riferimento PDF</h2>
               {saveStatus && <span className="save-status">{saveStatus}</span>}
             </div>
 
-            <PdfReferenceSection
-              isVisible={isPdfVisible}
-              authToken={authToken}
-              cloudPdf={activePlan.cloudPdf}
-              onHide={onHidePdf}
-              onPageChange={(pageNumber) => onWorkoutPdfPageChange(selectedWorkout.id, pageNumber)}
-              onShow={onShowPdf}
-              planId={activePlan.id}
-              pdfId={activePlan.pdfId}
-              pdfName={activePlan.cloudPdf?.name ?? activePlan.pdfName}
-              selectedPage={selectedWorkout.pdfPage}
-            />
+            <Suspense fallback={<p className="pdf-viewer-message">Caricamento PDF...</p>}>
+              <PdfReferenceSection
+                isVisible={isPdfVisible}
+                authToken={authToken}
+                cloudPdf={activePlan.cloudPdf}
+                onHide={onHidePdf}
+                onPageChange={(pageNumber) => onWorkoutPdfPageChange(selectedWorkout.id, pageNumber)}
+                onShow={onShowPdf}
+                planId={activePlan.id}
+                pdfName={activePlan.cloudPdf?.name}
+                selectedPage={selectedWorkout.pdfPage}
+              />
+            </Suspense>
           </section>
         )}
 

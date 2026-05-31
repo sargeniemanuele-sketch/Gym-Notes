@@ -1,10 +1,9 @@
 import React, { useEffect, useState } from "react";
-import * as pdfjsLib from "pdfjs-dist";
 import { getPlanPdf } from "../api/client.js";
-import { getPdfFile } from "../pdfStorage.js";
 import PdfPageViewer from "./PdfPageViewer.jsx";
+import { loadPdfJs } from "../utils/pdfjs.js";
 
-function PdfReferenceSection({ authToken, cloudPdf, isVisible, onHide, onPageChange, onShow, pdfId, pdfName, planId, selectedPage }) {
+function PdfReferenceSection({ authToken, cloudPdf, isVisible, onHide, onPageChange, onShow, pdfName, planId, selectedPage }) {
   const [pdfData, setPdfData] = useState(null);
   const [numPages, setNumPages] = useState(null);
   const [referenceStatus, setReferenceStatus] = useState("loading");
@@ -25,19 +24,13 @@ function PdfReferenceSection({ authToken, cloudPdf, isVisible, onHide, onPageCha
       setNumPages(null);
 
       try {
-        const savedPdf = pdfId ? await getPdfFile(pdfId) : null;
-        let arrayBuffer = null;
-
-        if (savedPdf?.file) {
-          arrayBuffer = await savedPdf.file.arrayBuffer();
-        } else if (cloudPdf?.key && authToken && planId) {
-          arrayBuffer = await getPlanPdf(authToken, planId);
-        }
+        const arrayBuffer = cloudPdf?.key && authToken && planId ? await getPlanPdf(authToken, planId) : null;
 
         if (!arrayBuffer) {
           throw new Error("missing-pdf");
         }
 
+        const pdfjsLib = await loadPdfJs();
         loadingTask = pdfjsLib.getDocument({ data: new Uint8Array(arrayBuffer.slice(0)) });
         const pdfDocument = await loadingTask.promise;
         const totalPages = pdfDocument.numPages;
@@ -70,7 +63,7 @@ function PdfReferenceSection({ authToken, cloudPdf, isVisible, onHide, onPageCha
         loadingTask.destroy();
       }
     };
-  }, [authToken, cloudPdf?.key, pdfId, planId]);
+  }, [authToken, cloudPdf?.key, planId]);
 
   useEffect(() => {
     if (!numPages) {
@@ -148,7 +141,7 @@ function PdfReferenceSection({ authToken, cloudPdf, isVisible, onHide, onPageCha
 
 function getPdfErrorMessage(err) {
   if (err?.message === "missing-pdf") {
-    return "PDF non trovato su questo dispositivo o nel cloud.";
+    return "PDF non trovato nel cloud.";
   }
 
   if (err?.message === "missing-pages") {
