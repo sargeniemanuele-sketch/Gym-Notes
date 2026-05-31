@@ -14,9 +14,9 @@ function PlanList({
   onOpenNewPlanForm,
   onOpenPlan,
   onPlanNameChange,
+  onResetData,
   planName,
   plans,
-  saveStatus,
   saveWarning
 }) {
   return (
@@ -93,7 +93,7 @@ function PlanList({
         <AccountCard
           auth={auth}
           onLogout={onLogout}
-          saveStatus={saveStatus}
+          onResetData={onResetData}
           saveWarning={saveWarning}
         />
       </section>

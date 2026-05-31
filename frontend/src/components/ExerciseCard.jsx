@@ -16,7 +16,7 @@ function ExerciseCard({ activeTimer, completedSets = [], exercise, isSessionActi
   const weightText = formatWeightForDisplay(exercise.weight);
   const restText = formatRestForDisplay(exercise.rest);
   const restDurationSeconds = getRestDurationSeconds(exercise.rest);
-  const notesText = exercise.notes?.trim() || "Nessuna nota";
+  const notesText = exercise.notes?.trim();
   const exerciseTimer = activeTimer?.exerciseId === exercise.id ? activeTimer : null;
   const totalSets = Number.parseInt(exercise.sets, 10);
   const showSetsTracker = Number.isFinite(totalSets) && totalSets > 0;
@@ -25,7 +25,16 @@ function ExerciseCard({ activeTimer, completedSets = [], exercise, isSessionActi
 
   if (!isEditing) {
     return (
-      <article id={`exercise-${exercise.id}`} className="exercise-card exercise-card-compact">
+      <article
+        id={`exercise-${exercise.id}`}
+        className={`exercise-card exercise-card-compact${
+          isSessionActive && showSetsTracker
+            ? allDone
+              ? " exercise-card--done"
+              : " exercise-card--active"
+            : ""
+        }`}
+      >
         <header className="exercise-card-header">
           <div>
             <h3>{exerciseName}</h3>
@@ -47,10 +56,12 @@ function ExerciseCard({ activeTimer, completedSets = [], exercise, isSessionActi
             <p>{restText}</p>
           </div>
 
-          <div className="exercise-read-block">
-            <span>Note</span>
-            <p>{notesText}</p>
-          </div>
+          {notesText && (
+            <div className="exercise-read-block">
+              <span>Note</span>
+              <p>{notesText}</p>
+            </div>
+          )}
         </div>
 
         <RestTimer

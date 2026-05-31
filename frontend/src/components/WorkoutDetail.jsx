@@ -38,7 +38,6 @@ function WorkoutDetail({
   onUpdateExercise,
   onWorkoutNameChange,
   onWorkoutPdfPageChange,
-  saveStatus,
   saveWarning,
   selectedWorkout,
   sessionFeedback,
@@ -93,6 +92,7 @@ function WorkoutDetail({
             </div>
           ) : (
             <>
+              <p className="eyebrow">Allenamento</p>
               <h1>{selectedWorkout.name || "Allenamento senza nome"}</h1>
               <p className="detail-meta">
                 Scheda: {activePlan.name || "Scheda senza nome"} · Oggi {todayLabel}
@@ -118,7 +118,6 @@ function WorkoutDetail({
           <section className="content-section" aria-labelledby="pdf-reference-title">
             <div className="section-title-row">
               <h2 id="pdf-reference-title">Riferimento PDF</h2>
-              {saveStatus && <span className="save-status">{saveStatus}</span>}
             </div>
 
             <Suspense fallback={<p className="pdf-viewer-message">Caricamento PDF...</p>}>
@@ -140,11 +139,13 @@ function WorkoutDetail({
         <section className="content-section" aria-labelledby="exercises-title">
           <div className="section-title-row">
             <h2 id="exercises-title">Esercizi</h2>
-            {saveStatus && <span className="save-status">{saveStatus}</span>}
           </div>
 
           {selectedWorkoutExercises.length === 0 ? (
-            <p className="empty-state">Non hai ancora aggiunto esercizi.</p>
+            <div className="empty-guide">
+              <h3>Nessun esercizio</h3>
+              <p>Aggiungi il primo esercizio con il pulsante <strong>+ Aggiungi esercizio</strong> qui sotto.</p>
+            </div>
           ) : (
             <div className="exercise-list">
               {selectedWorkoutExercises.map((exercise) => (

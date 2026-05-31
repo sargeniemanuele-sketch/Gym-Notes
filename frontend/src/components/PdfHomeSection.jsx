@@ -1,6 +1,6 @@
 import React from "react";
 
-function PdfHomeSection({ activePlan, onFileChange, onOpenFilePicker, onRemovePdf, pdfError, pdfInputRef, saveStatus }) {
+function PdfHomeSection({ activePlan, onFileChange, onOpenFilePicker, onRemovePdf, pdfError, pdfInputRef }) {
   const hasPdf = !!activePlan.cloudPdf?.key;
   const pdfName = activePlan.cloudPdf?.name;
 
@@ -8,7 +8,6 @@ function PdfHomeSection({ activePlan, onFileChange, onOpenFilePicker, onRemovePd
     <section className="content-section pdf-support-section" aria-labelledby="original-pdf-title">
       <div className="section-title-row">
         <h2 id="original-pdf-title">Scheda originale PDF</h2>
-        {saveStatus && <span className="save-status">{saveStatus}</span>}
       </div>
 
       <div className="pdf-home-card">

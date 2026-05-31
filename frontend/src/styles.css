@@ -143,6 +143,7 @@ textarea:focus-visible,
   padding: 18px;
   background: var(--surface);
   color: var(--ink);
+  box-shadow: 0 1px 2px rgba(28, 27, 24, 0.05), 0 4px 12px rgba(28, 27, 24, 0.04);
 }
 
 .plan-card h2 {
@@ -172,16 +173,18 @@ textarea:focus-visible,
   border: 0;
   border-radius: 14px;
   padding: 0 18px;
-  background: var(--ink);
+  background: var(--accent);
   color: #ffffff;
   font-size: 0.96rem;
   font-weight: 700;
+  box-shadow: 0 1px 0 rgba(164, 80, 47, 0.5) inset;
 }
 
 .plan-card-actions .text-danger-button {
   border: 1px solid var(--red-soft);
   background: var(--surface);
   color: var(--red);
+  box-shadow: none;
 }
 
 .plan-card-actions .plan-duplicate-button {
@@ -264,6 +267,36 @@ h3 {
   line-height: 1.6;
 }
 
+.empty-guide {
+  display: grid;
+  gap: 6px;
+  margin: 16px 0 0;
+  border: 1px dashed var(--line);
+  border-radius: 16px;
+  padding: 22px 18px;
+  background: var(--bg-2);
+  text-align: center;
+}
+
+.empty-guide h3 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 1.02rem;
+  font-weight: 700;
+}
+
+.empty-guide p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.92rem;
+  line-height: 1.55;
+}
+
+.empty-guide strong {
+  color: var(--ink-2);
+  font-weight: 700;
+}
+
 .form-stack {
   display: grid;
   gap: 12px;
@@ -336,12 +369,13 @@ h3 {
   border: 0;
   border-radius: 14px;
   padding: 0 18px;
-  background: var(--ink);
+  background: var(--accent);
   color: #ffffff;
   font-size: 0.98rem;
   font-weight: 700;
   letter-spacing: -0.01em;
   touch-action: manipulation;
+  box-shadow: 0 1px 0 rgba(164, 80, 47, 0.5) inset;
 }
 
 .form-stack button {
@@ -352,7 +386,6 @@ h3 {
 .secondary-action {
   width: 100%;
   margin-top: 20px;
-  background: var(--ink);
 }
 
 .plan-new-button,
@@ -370,6 +403,7 @@ h3 {
   border: 1px solid var(--line) !important;
   background: var(--surface) !important;
   color: var(--ink-2) !important;
+  box-shadow: none !important;
 }
 
 .text-danger-button,
@@ -383,6 +417,7 @@ h3 {
   color: var(--red);
   font-size: 0.88rem;
   font-weight: 750;
+  box-shadow: none;
 }
 
 .outline-danger-button {
@@ -399,6 +434,7 @@ h3 {
   border: 1px solid var(--red-soft);
   background: var(--red-soft);
   color: var(--red);
+  box-shadow: none;
 }
 
 .reset-button {
@@ -543,7 +579,7 @@ h3 {
   border-radius: 18px;
   background: var(--surface);
   color: var(--ink);
-  box-shadow: none;
+  box-shadow: 0 1px 2px rgba(28, 27, 24, 0.05), 0 4px 12px rgba(28, 27, 24, 0.04);
 }
 
 .workout-card {
@@ -591,6 +627,7 @@ h3 {
   color: var(--red);
   font-size: 0.98rem;
   font-weight: 700;
+  box-shadow: none;
 }
 
 .workout-card-actions .outline-danger-button,
@@ -602,6 +639,7 @@ h3 {
   border: 1px solid var(--red-soft);
   background: var(--surface);
   color: var(--red);
+  box-shadow: none;
 }
 
 .workout-form {
@@ -686,6 +724,7 @@ h3 {
   background: var(--accent-soft);
   color: var(--accent-ink);
   font-size: 0.92rem;
+  box-shadow: none;
 }
 
 .pdf-actions .danger-button {
@@ -759,6 +798,10 @@ h3 {
 .pdf-show-button {
   width: 100%;
   margin-top: 0;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink-2);
+  box-shadow: none;
 }
 
 .pdf-viewer {
@@ -795,8 +838,18 @@ h3 {
 }
 
 .exercise-card-compact {
-  gap: 16px;
-  padding: 16px;
+  gap: 13px;
+  padding: 15px;
+}
+
+.exercise-card--active {
+  border-color: rgba(201, 100, 66, 0.4);
+  box-shadow: inset 3px 0 0 var(--accent), 0 1px 2px rgba(28, 27, 24, 0.05), 0 4px 12px rgba(28, 27, 24, 0.04);
+}
+
+.exercise-card--done {
+  border-color: rgba(79, 126, 84, 0.4);
+  box-shadow: inset 3px 0 0 var(--green), 0 1px 2px rgba(28, 27, 24, 0.05), 0 4px 12px rgba(28, 27, 24, 0.04);
 }
 
 .exercise-card-header {
@@ -892,10 +945,16 @@ h3 {
 
 .rest-timer-start {
   width: 100%;
-  background: var(--ink);
+  min-height: 46px;
+  border: 1px solid rgba(201, 100, 66, 0.28);
+  background: var(--accent-soft);
+  color: var(--accent-ink);
+  font-size: 0.92rem;
+  box-shadow: none;
 }
 
 .rest-timer-start:disabled {
+  border-color: var(--line);
   background: var(--bg-2);
   color: var(--muted);
 }
@@ -932,6 +991,14 @@ h3 {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 10px;
+}
+
+.rest-timer-actions button {
+  min-height: 46px;
+  border: 1px solid rgba(201, 100, 66, 0.28);
+  background: var(--accent-soft);
+  color: var(--accent-ink);
+  box-shadow: none;
 }
 
 .rest-timer-actions .ghost-button {
@@ -1077,16 +1144,17 @@ h3 {
 
 .session-start-button {
   width: 100%;
-  min-height: 52px;
+  min-height: 56px;
   border: 0;
   border-radius: 14px;
   padding: 0 18px;
-  background: var(--ink);
+  background: var(--accent);
   color: #ffffff;
-  font-size: 0.98rem;
+  font-size: 1.02rem;
   font-weight: 700;
   letter-spacing: -0.01em;
   touch-action: manipulation;
+  box-shadow: 0 1px 0 rgba(164, 80, 47, 0.5) inset;
 }
 
 .session-active {
@@ -1377,6 +1445,109 @@ h3 {
   border: 1px solid var(--line);
   background: var(--surface);
   color: var(--ink-2);
+}
+
+/* ── Active session bar ──────────────────────────────── */
+
+.active-session-bar {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 12px 18px calc(12px + env(safe-area-inset-bottom));
+  border-top: 1px solid var(--line);
+  background: var(--surface);
+  box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.08);
+}
+
+.active-session-bar-info {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  flex: 1 1 0;
+  border: 0;
+  border-radius: 10px;
+  padding: 6px 8px;
+  margin: -6px -8px;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: background 0.12s;
+}
+
+.active-session-bar-info:hover,
+.active-session-bar-info:focus-visible {
+  background: rgba(0, 0, 0, 0.05);
+}
+
+.active-session-bar-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--accent);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.active-session-bar-pulse {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: session-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes session-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.7); }
+}
+
+.active-session-bar-label {
+  margin: 0;
+  color: var(--ink);
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.active-session-bar-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.active-session-bar-time {
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 1.1rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.active-session-bar-btn {
+  min-height: 44px;
+  border: 0;
+  border-radius: 12px;
+  padding: 0 16px;
+  background: var(--accent);
+  color: #ffffff;
+  font-size: 0.9rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  touch-action: manipulation;
+  white-space: nowrap;
 }
 
 /* ── Plan tabs ───────────────────────────────────────── */
@@ -1899,4 +2070,172 @@ h3 {
   color: var(--subtle);
   font-size: 0.82rem;
   line-height: 1.5;
+}
+
+.account-danger-zone {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line-soft);
+}
+
+.account-danger-note {
+  margin: 0 0 12px;
+  color: var(--muted);
+  font-size: 0.84rem;
+  line-height: 1.5;
+}
+
+/* ── Sync indicator ──────────────────────────────────── */
+
+.sync-indicator {
+  position: fixed;
+  top: calc(10px + env(safe-area-inset-top));
+  right: calc(12px + env(safe-area-inset-right));
+  z-index: 300;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 6px 12px 6px 10px;
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(6px);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--muted);
+  animation: dialog-fade 0.16s ease-out;
+}
+
+.sync-indicator-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.sync-indicator--saving {
+  color: var(--accent-ink);
+}
+
+.sync-indicator--saving .sync-indicator-dot {
+  animation: sync-pulse 0.9s ease-in-out infinite;
+}
+
+.sync-indicator--saved {
+  color: var(--green);
+}
+
+.sync-indicator--error {
+  color: var(--red);
+  border-color: var(--red-soft);
+}
+
+@keyframes sync-pulse {
+  50% {
+    opacity: 0.3;
+  }
+}
+
+/* ── Confirm dialog ──────────────────────────────────── */
+
+.dialog-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 400;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 18px;
+  background: rgba(28, 27, 24, 0.42);
+  backdrop-filter: blur(2px);
+  animation: dialog-fade 0.16s ease-out;
+}
+
+.dialog-card {
+  width: 100%;
+  max-width: 440px;
+  margin-bottom: env(safe-area-inset-bottom);
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  padding: 22px 20px;
+  background: var(--surface);
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.22);
+  animation: dialog-rise 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.dialog-card--danger {
+  border-color: var(--red-soft);
+}
+
+.dialog-title {
+  margin: 0;
+  color: var(--ink);
+  font-size: 1.16rem;
+  letter-spacing: -0.01em;
+}
+
+.dialog-message {
+  margin: 10px 0 0;
+  color: var(--muted);
+  font-size: 0.95rem;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.dialog-input {
+  width: 100%;
+  margin-top: 16px;
+}
+
+.dialog-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 22px;
+}
+
+.dialog-confirm {
+  min-height: 52px;
+  border: 0;
+  border-radius: 14px;
+  padding: 0 18px;
+  background: var(--accent);
+  color: #ffffff;
+  font-size: 0.98rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  box-shadow: 0 1px 0 rgba(164, 80, 47, 0.5) inset;
+  touch-action: manipulation;
+}
+
+.dialog-confirm--danger {
+  background: var(--red);
+  box-shadow: none;
+}
+
+.dialog-confirm:disabled {
+  background: var(--line);
+  color: var(--subtle);
+  box-shadow: none;
+}
+
+@keyframes dialog-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes dialog-rise {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+}
+
+@media (min-width: 560px) {
+  .dialog-overlay {
+    align-items: center;
+  }
 }

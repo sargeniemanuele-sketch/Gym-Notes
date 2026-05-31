@@ -24,7 +24,6 @@ function PlanDetail({
   onOpenWorkout,
   onPlanNameChange,
   onRemovePdf,
-  onResetData,
   onStartPlanRename,
   onShowNewWorkoutForm,
   onStartWorkoutRename,
@@ -32,7 +31,6 @@ function PlanDetail({
   onWorkoutNameInputChange,
   pdfError,
   pdfInputRef,
-  saveStatus,
   saveWarning,
   todayLabel,
   workoutName
@@ -71,6 +69,7 @@ function PlanDetail({
             </div>
           ) : (
             <>
+              <p className="eyebrow">Scheda</p>
               <h1>{activePlan.name || "Scheda senza nome"}</h1>
               <p className="detail-meta">Scheda attiva · Oggi {todayLabel}</p>
               <button className="inline-secondary-button" type="button" onClick={onStartPlanRename}>
@@ -87,11 +86,13 @@ function PlanDetail({
             <section className="content-section" aria-labelledby="workouts-title">
               <div className="section-title-row">
                 <h2 id="workouts-title">I tuoi allenamenti</h2>
-                {saveStatus && <span className="save-status">{saveStatus}</span>}
               </div>
 
               {activePlan.workouts.length === 0 ? (
-                <p className="empty-state">Non hai ancora creato allenamenti.</p>
+                <div className="empty-guide">
+                  <h3>Nessun allenamento</h3>
+                  <p>Crea il tuo primo allenamento con il pulsante <strong>+ Nuovo allenamento</strong> qui sotto.</p>
+                </div>
               ) : (
                 <div className="card-list">
                   {activePlan.workouts.map((workout) => (
@@ -144,14 +145,7 @@ function PlanDetail({
               onRemovePdf={onRemovePdf}
               pdfError={pdfError}
               pdfInputRef={pdfInputRef}
-              saveStatus={saveStatus}
             />
-
-            <section className="content-section account-actions-section">
-              <button className="reset-button" type="button" onClick={onResetData}>
-                Reset dati
-              </button>
-            </section>
           </>
         )}
 

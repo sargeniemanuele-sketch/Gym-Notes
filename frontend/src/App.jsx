@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import ActiveSessionBar from "./components/ActiveSessionBar.jsx";
 import ActiveTimerBar from "./components/ActiveTimerBar.jsx";
 import PlanDetail from "./components/PlanDetail.jsx";
 import PlanList from "./components/PlanList.jsx";
@@ -28,6 +29,9 @@ import {
   shouldConfirmLogoutAfterFlush
 } from "./utils/cloudSaveState.js";
 import AuthScreen from "./components/AuthScreen.jsx";
+import ConfirmDialog from "./components/ConfirmDialog.jsx";
+import SyncIndicator from "./components/SyncIndicator.jsx";
+import { useConfirm } from "./utils/useConfirm.js";
 
 const emptyExerciseDraft = {
   name: "",
@@ -54,7 +58,6 @@ function App() {
   const [isExerciseFormOpen, setIsExerciseFormOpen] = useState(false);
   const [exerciseDraft, setExerciseDraft] = useState(emptyExerciseDraft);
   const [exerciseError, setExerciseError] = useState("");
-  const [saveStatus, setSaveStatus] = useState("");
   const [cloudSaveStatus, setCloudSaveStatus] = useState(CLOUD_SAVE_STATUS.IDLE);
   const [saveWarning, setSaveWarning] = useState("");
   const [pdfError, setPdfError] = useState("");
@@ -63,7 +66,7 @@ function App() {
   const [sessionFeedback, setSessionFeedback] = useState("");
   const [auth, setAuth] = useState(() => loadAuth());
   const [cloudLoadError, setCloudLoadError] = useState("");
-  const saveStatusTimeoutRef = useRef(null);
+  const { confirm, dialogProps } = useConfirm();
   const sessionFeedbackTimeoutRef = useRef(null);
   const cloudSaveTimerRef = useRef(null);
   const cloudSaveInFlightRef = useRef(false);
@@ -210,7 +213,6 @@ function App() {
     pendingCloudDataRef.current = nextData;
     cloudSaveTokenRef.current = auth?.token ?? null;
     setCloudSaveStatus(CLOUD_SAVE_STATUS.SAVING);
-    setSaveStatus(getCloudSaveMessage(CLOUD_SAVE_STATUS.SAVING));
 
     if (cloudSaveTimerRef.current) clearTimeout(cloudSaveTimerRef.current);
     cloudSaveTimerRef.current = setTimeout(flushCloudSave, 1200);
@@ -244,7 +246,6 @@ function App() {
 
     cloudSaveInFlightRef.current = true;
     setCloudSaveStatus(CLOUD_SAVE_STATUS.SAVING);
-    setSaveStatus(getCloudSaveMessage(CLOUD_SAVE_STATUS.SAVING));
 
     try {
       while (cloudSaveTokenRef.current && pendingCloudDataRef.current) {
@@ -279,7 +280,6 @@ function App() {
         current.startsWith("Cloud non disponibile") ? "" : current
       );
       setCloudSaveStatus(CLOUD_SAVE_STATUS.SAVED);
-      showSavedStatus(getCloudSaveMessage(CLOUD_SAVE_STATUS.SAVED));
     } catch (err) {
       if (err.status === 401) {
         clearAuth();
@@ -341,26 +341,6 @@ function App() {
     });
   }
 
-  function showSavedStatus(message = "Salvato nel cloud") {
-    setSaveStatus(message);
-
-    if (saveStatusTimeoutRef.current) {
-      window.clearTimeout(saveStatusTimeoutRef.current);
-    }
-
-    saveStatusTimeoutRef.current = window.setTimeout(() => {
-      setSaveStatus("");
-    }, 1800);
-  }
-
-  function showLocalActionStatus(message = "Modifica in memoria. Salvataggio...") {
-    setSaveStatus(message);
-
-    if (saveStatusTimeoutRef.current) {
-      window.clearTimeout(saveStatusTimeoutRef.current);
-    }
-  }
-
   function showSessionFeedback(message) {
     setSessionFeedback(message);
 
@@ -396,7 +376,6 @@ function App() {
 
       await applyCloudGymData(remoteData);
       setCloudSaveStatus("saved");
-      showSavedStatus("Dati cloud caricati");
 
       return true;
     } catch (err) {
@@ -454,7 +433,6 @@ function App() {
       await applyCloudGymData(remoteData);
       setSaveWarning("");
       setCloudSaveStatus("saved");
-      showSavedStatus("Dati cloud aggiornati");
     } catch (err) {
       if (err.status === 401) {
         clearAuth();
@@ -491,7 +469,12 @@ function App() {
       } catch {
         const confirmed =
           shouldConfirmLogoutAfterFlush({ hadPendingChanges: true, flushSucceeded }) &&
-          window.confirm("Ci sono modifiche non salvate nel cloud. Uscire comunque?");
+          (await confirm({
+            title: "Modifiche non salvate",
+            message: "Alcune modifiche non sono ancora state salvate nel cloud. Uscire comunque?",
+            confirmLabel: "Esci",
+            tone: "danger"
+          }));
 
         if (!confirmed) {
           return;
@@ -519,13 +502,18 @@ function App() {
     setSaveWarning("");
   }
 
-  function handleStartSession(workoutId) {
+  async function handleStartSession(workoutId) {
     if (!activePlan) {
       return;
     }
 
     if (activeSession && activeSession.workoutId !== workoutId) {
-      const confirmed = window.confirm("Hai già una sessione in corso. Vuoi sostituirla?");
+      const confirmed = await confirm({
+        title: "Sessione già in corso",
+        message: "Hai già un allenamento in corso. Vuoi sostituirlo con questo?",
+        confirmLabel: "Sostituisci",
+        tone: "danger"
+      });
 
       if (!confirmed) {
         return;
@@ -616,8 +604,14 @@ function App() {
     });
   }
 
-  function handleCancelSession() {
-    const confirmed = window.confirm("Vuoi annullare questa sessione?");
+  async function handleCancelSession() {
+    const confirmed = await confirm({
+      title: "Annullare la sessione?",
+      message: "I progressi non salvati di questo allenamento andranno persi.",
+      confirmLabel: "Annulla sessione",
+      cancelLabel: "Continua",
+      tone: "danger"
+    });
 
     if (!confirmed) {
       return;
@@ -651,6 +645,24 @@ function App() {
     }
 
     const { planId, workoutId } = activeTimer;
+
+    if (gymData && gymData.activePlanId !== planId) {
+      persistNextData({ ...gymData, activePlanId: planId });
+    }
+
+    setIsPlanOpen(true);
+    setSelectedWorkoutId(workoutId);
+    setIsExerciseFormOpen(false);
+    setEditingWorkoutId(null);
+    setIsNewWorkoutFormOpen(false);
+  }
+
+  function handleResumeSession() {
+    if (!activeSession) {
+      return;
+    }
+
+    const { planId, workoutId } = activeSession;
 
     if (gymData && gymData.activePlanId !== planId) {
       persistNextData({ ...gymData, activePlanId: planId });
@@ -777,7 +789,12 @@ function App() {
       return;
     }
 
-    const confirmed = window.confirm("Vuoi eliminare questa scheda e tutti i suoi dati?");
+    const confirmed = await confirm({
+      title: "Eliminare la scheda?",
+      message: `"${planToDelete.name || "Scheda senza nome"}" e tutti i suoi allenamenti, esercizi e storico verranno eliminati.`,
+      confirmLabel: "Elimina",
+      tone: "danger"
+    });
 
     if (!confirmed) {
       return;
@@ -813,7 +830,6 @@ function App() {
       setWorkoutNameBeforeRename(null);
     }
 
-    showLocalActionStatus("Scheda rimossa. Salvataggio...");
 
     try {
       await flushRequiredCloudSave();
@@ -885,7 +901,6 @@ function App() {
     setExerciseError("");
     setPdfError("");
     setIsPdfVisible(false);
-    showLocalActionStatus("Scheda duplicata. Salvataggio...");
   }
 
   function handleBackToPlans() {
@@ -938,7 +953,6 @@ function App() {
     persistNextActivePlan(nextPlan);
     setWorkoutName("");
     setIsNewWorkoutFormOpen(false);
-    showLocalActionStatus("Allenamento creato. Salvataggio...");
   }
 
   function handleCancelCreateWorkout() {
@@ -958,7 +972,6 @@ function App() {
     };
 
     persistNextActivePlan(nextPlan);
-    showLocalActionStatus();
   }
 
   function handleStartPlanRename() {
@@ -999,7 +1012,6 @@ function App() {
       ...nextPlan,
       updatedAt: new Date().toISOString()
     });
-    showLocalActionStatus();
   }
 
   function handleStartWorkoutRename(workoutId) {
@@ -1030,12 +1042,18 @@ function App() {
     setEditingWorkoutId(null);
   }
 
-  function handleDeleteWorkout(workoutId) {
+  async function handleDeleteWorkout(workoutId) {
     if (!activePlan) {
       return;
     }
 
-    const confirmed = window.confirm("Vuoi eliminare questo allenamento e tutti i suoi esercizi?");
+    const workoutToDelete = activePlan.workouts.find((workout) => workout.id === workoutId);
+    const confirmed = await confirm({
+      title: "Eliminare l'allenamento?",
+      message: `"${workoutToDelete?.name || "Allenamento senza nome"}" e tutti i suoi esercizi verranno eliminati.`,
+      confirmLabel: "Elimina",
+      tone: "danger"
+    });
 
     if (!confirmed) {
       return;
@@ -1068,11 +1086,16 @@ function App() {
     } else {
       persistNextActivePlan(nextPlan);
     }
-    showLocalActionStatus("Allenamento eliminato. Salvataggio...");
   }
 
   async function handleResetData() {
-    const confirmed = window.confirm("Vuoi cancellare tutte le schede e tutti i dati salvati nel cloud?");
+    const confirmed = await confirm({
+      title: "Cancellare tutti i dati?",
+      message: "Tutte le schede, gli allenamenti e lo storico verranno eliminati definitivamente dal cloud. Digita RESET per confermare.",
+      confirmLabel: "Cancella tutto",
+      requireText: "RESET",
+      tone: "danger"
+    });
 
     if (!confirmed) {
       return;
@@ -1112,7 +1135,6 @@ function App() {
     setExerciseError("");
     setPdfError("");
     setIsPdfVisible(false);
-    showLocalActionStatus("Dati resettati. Salvataggio...");
 
     try {
       await flushRequiredCloudSave();
@@ -1170,7 +1192,6 @@ function App() {
       };
 
       persistNextActivePlan(nextPlan);
-      showLocalActionStatus("PDF caricato nel cloud. Salvataggio scheda...");
     } catch (err) {
       setPdfError(err?.message ?? "Non è stato possibile salvare il PDF.");
     }
@@ -1181,7 +1202,12 @@ function App() {
       return;
     }
 
-    const confirmed = window.confirm("Vuoi rimuovere il PDF dal cloud?");
+    const confirmed = await confirm({
+      title: "Rimuovere il PDF?",
+      message: "Il PDF di riferimento verrà rimosso dal cloud per questa scheda.",
+      confirmLabel: "Rimuovi",
+      tone: "danger"
+    });
 
     if (!confirmed) {
       return;
@@ -1205,7 +1231,6 @@ function App() {
 
     persistNextActivePlan(nextPlan);
     setIsPdfVisible(false);
-    showLocalActionStatus("PDF rimosso dal cloud. Salvataggio scheda...");
   }
 
   function handleWorkoutPdfPageChange(workoutId, value) {
@@ -1226,7 +1251,6 @@ function App() {
       ...nextPlan,
       updatedAt: now
     });
-    showLocalActionStatus();
   }
 
   function handleExerciseDraftChange(field, value) {
@@ -1277,7 +1301,6 @@ function App() {
       ...nextPlan,
       updatedAt: now
     });
-    showLocalActionStatus("Esercizio aggiunto. Salvataggio...");
     setExerciseDraft(emptyExerciseDraft);
     setExerciseError("");
     setIsExerciseFormOpen(false);
@@ -1315,15 +1338,19 @@ function App() {
       ...nextPlan,
       updatedAt: now
     });
-    showLocalActionStatus();
   }
 
-  function handleDeleteExercise(exerciseId) {
+  async function handleDeleteExercise(exerciseId) {
     if (!activePlan || !selectedWorkout) {
       return;
     }
 
-    const confirmed = window.confirm("Vuoi eliminare questo esercizio?");
+    const confirmed = await confirm({
+      title: "Eliminare l'esercizio?",
+      message: "L'esercizio verrà rimosso da questo allenamento.",
+      confirmLabel: "Elimina",
+      tone: "danger"
+    });
 
     if (!confirmed) {
       return;
@@ -1354,18 +1381,41 @@ function App() {
       activeSessionUpdatedAt: nextSession !== activeSession ? now : gymData?.activeSessionUpdatedAt,
       plans: gymData.plans.map((plan) => (plan.id === nextPlan.id ? { ...nextPlan, updatedAt: now } : plan))
     });
-    showLocalActionStatus("Esercizio eliminato. Salvataggio...");
   }
 
-  const timerBar = activeTimer ? (
-    <ActiveTimerBar
-      activeTimer={activeTimer}
-      onNavigate={handleNavigateToTimerExercise}
-      onPause={handleBarTimerPause}
-      onResume={handleBarTimerResume}
-      onReset={handleBarTimerReset}
-    />
-  ) : null;
+  const sessionPlan = activeSession ? plans.find((plan) => plan.id === activeSession.planId) : null;
+  const sessionWorkout = sessionPlan?.workouts.find((workout) => workout.id === activeSession?.workoutId) ?? null;
+  const viewingSessionWorkout =
+    isPlanOpen &&
+    !!selectedWorkout &&
+    selectedWorkout.id === activeSession?.workoutId &&
+    activePlan?.id === activeSession?.planId;
+  const showSessionBar = !!activeSession && !activeTimer && !viewingSessionWorkout;
+  const hasBar = !!activeTimer || showSessionBar;
+
+  const overlays = (
+    <>
+      {activeTimer ? (
+        <ActiveTimerBar
+          activeTimer={activeTimer}
+          onNavigate={handleNavigateToTimerExercise}
+          onPause={handleBarTimerPause}
+          onResume={handleBarTimerResume}
+          onReset={handleBarTimerReset}
+        />
+      ) : null}
+      {showSessionBar ? (
+        <ActiveSessionBar
+          startedAt={activeSession.startedAt}
+          workoutName={sessionWorkout?.name}
+          planName={sessionPlan?.name}
+          onResume={handleResumeSession}
+        />
+      ) : null}
+      <SyncIndicator status={cloudSaveStatus} />
+      <ConfirmDialog {...dialogProps} />
+    </>
+  );
 
   if (!auth) {
     return <AuthScreen onLogin={handleLogin} onRegister={handleRegister} />;
@@ -1403,7 +1453,7 @@ function App() {
       <>
         <PlanList
           auth={auth}
-          hasTimerBar={!!activeTimer}
+          hasTimerBar={hasBar}
           isNewPlanFormOpen={isNewPlanFormOpen}
           onCancelCreatePlan={handleCancelCreatePlan}
           onCreatePlan={handleCreatePlan}
@@ -1413,12 +1463,12 @@ function App() {
           onOpenNewPlanForm={() => setIsNewPlanFormOpen(true)}
           onOpenPlan={handleOpenPlan}
           onPlanNameChange={setPlanName}
+          onResetData={handleResetData}
           planName={planName}
           plans={plans}
-          saveStatus={saveStatus}
           saveWarning={saveWarning}
         />
-        {timerBar}
+        {overlays}
       </>
     );
   }
@@ -1434,7 +1484,7 @@ function App() {
           editingWorkoutId={editingWorkoutId}
           exerciseDraft={exerciseDraft}
           exerciseError={exerciseError}
-          hasTimerBar={!!activeTimer}
+          hasTimerBar={hasBar}
           isExerciseFormOpen={isExerciseFormOpen}
           isPdfVisible={isPdfVisible}
           onAddExercise={handleAddExercise}
@@ -1459,13 +1509,12 @@ function App() {
           onUpdateExercise={handleUpdateExercise}
           onWorkoutNameChange={handleWorkoutNameChange}
           onWorkoutPdfPageChange={handleWorkoutPdfPageChange}
-          saveStatus={saveStatus}
           saveWarning={saveWarning}
           selectedWorkout={selectedWorkout}
           sessionFeedback={sessionFeedback}
           todayLabel={todayLabel}
         />
-        {timerBar}
+        {overlays}
       </>
     );
   }
@@ -1475,7 +1524,7 @@ function App() {
       <PlanDetail
         activePlan={activePlan}
         editingWorkoutId={editingWorkoutId}
-        hasTimerBar={!!activeTimer}
+        hasTimerBar={hasBar}
         isNewWorkoutFormOpen={isNewWorkoutFormOpen}
         isRenamingPlan={isRenamingPlan}
         onBackToPlans={handleBackToPlans}
@@ -1490,7 +1539,6 @@ function App() {
         onOpenWorkout={setSelectedWorkoutId}
         onPlanNameChange={handlePlanNameChange}
         onRemovePdf={handleRemovePdf}
-        onResetData={handleResetData}
         onStartPlanRename={handleStartPlanRename}
         onShowNewWorkoutForm={() => setIsNewWorkoutFormOpen(true)}
         onStartWorkoutRename={handleStartWorkoutRename}
@@ -1499,12 +1547,11 @@ function App() {
         onWorkoutNameInputChange={setWorkoutName}
         pdfError={pdfError}
         pdfInputRef={pdfInputRef}
-        saveStatus={saveStatus}
         saveWarning={saveWarning}
         todayLabel={todayLabel}
         workoutName={workoutName}
       />
-      {timerBar}
+      {overlays}
     </>
   );
 }
