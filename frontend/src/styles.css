@@ -474,6 +474,74 @@ h3 {
   margin-top: 16px;
 }
 
+.page-header-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.edit-toggle-button {
+  flex: 0 0 auto;
+  min-height: 40px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 0 16px;
+  background: var(--surface);
+  color: var(--ink-2);
+  font-size: 0.9rem;
+  font-weight: 750;
+}
+
+.edit-toggle-button--active {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
+}
+
+.drag-handle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 34px;
+  margin-bottom: 8px;
+  border: 1px dashed var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.sortable-item {
+  list-style: none;
+}
+
+.sortable-item--dragging {
+  opacity: 0.92;
+  box-shadow: 0 8px 24px rgba(28, 27, 24, 0.18);
+}
+
+.sortable-item--over {
+  position: relative;
+}
+
+.sortable-item--over::before {
+  content: "";
+  position: absolute;
+  top: -6px;
+  left: 0;
+  right: 0;
+  height: 3px;
+  border-radius: 3px;
+  background: var(--accent);
+}
+
 .detail-meta {
   margin: 12px 0 0;
   color: var(--muted);
@@ -877,6 +945,12 @@ h3 {
   line-height: 1.35;
 }
 
+.exercise-card-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 8px;
+}
+
 .compact-edit-button {
   flex: 0 0 auto;
   min-height: 40px;
@@ -887,6 +961,24 @@ h3 {
   color: var(--ink-2);
   font-size: 0.9rem;
   font-weight: 700;
+}
+
+.exercise-add-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.exercise-add-actions .secondary-action {
+  flex: 1 1 auto;
+}
+
+.paste-exercise-button {
+  flex: 0 0 auto;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .exercise-read-grid {

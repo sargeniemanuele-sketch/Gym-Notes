@@ -1,6 +1,6 @@
 import React from "react";
 
-function PlanCard({ onDelete, onDuplicate, onOpen, plan }) {
+function PlanCard({ isEditing = false, onDelete, onDuplicate, onOpen, plan }) {
   const workoutCount = plan.workouts.length;
   const workoutLabel = workoutCount === 1 ? "1 allenamento" : `${workoutCount} allenamenti`;
   const pdfLabel = plan.cloudPdf?.key ? "PDF salvato nel cloud" : "Nessun PDF";
@@ -18,12 +18,16 @@ function PlanCard({ onDelete, onDuplicate, onOpen, plan }) {
         <button type="button" onClick={() => onOpen(plan.id)}>
           Apri
         </button>
-        <button className="ghost-button plan-duplicate-button" type="button" onClick={() => onDuplicate(plan.id)}>
-          Duplica
-        </button>
-        <button className="text-danger-button" type="button" onClick={() => onDelete(plan.id)}>
-          Elimina
-        </button>
+        {isEditing && (
+          <>
+            <button className="ghost-button plan-duplicate-button" type="button" onClick={() => onDuplicate(plan.id)}>
+              Duplica
+            </button>
+            <button className="text-danger-button" type="button" onClick={() => onDelete(plan.id)}>
+              Elimina
+            </button>
+          </>
+        )}
       </div>
     </article>
   );

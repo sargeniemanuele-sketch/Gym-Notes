@@ -1,6 +1,7 @@
 import React, { Suspense, lazy, useEffect } from "react";
 import ExerciseCard from "./ExerciseCard.jsx";
 import ExerciseForm from "./ExerciseForm.jsx";
+import SortableList from "./SortableList.jsx";
 import WorkoutSessionControls from "./WorkoutSessionControls.jsx";
 
 const PdfReferenceSection = lazy(() => import("./PdfReferenceSection.jsx"));
@@ -10,10 +11,12 @@ function WorkoutDetail({
   activeSession,
   activeTimer,
   authToken,
+  copiedExercise,
   editingWorkoutId,
   exerciseDraft,
   exerciseError,
   hasTimerBar,
+  isEditing,
   isExerciseFormOpen,
   isPdfVisible,
   onAddExercise,
@@ -21,7 +24,11 @@ function WorkoutDetail({
   onCancelExerciseForm,
   onCancelSession,
   onCompleteSession,
+  onCopyExercise,
   onDeleteExercise,
+  onPasteExercise,
+  onReorderExercises,
+  onToggleEdit,
   onExerciseDraftChange,
   onHidePdf,
   onPauseRestTimer,
@@ -92,14 +99,25 @@ function WorkoutDetail({
             </div>
           ) : (
             <>
-              <p className="eyebrow">Allenamento</p>
+              <div className="page-header-top">
+                <p className="eyebrow">Allenamento</p>
+                <button
+                  className={`edit-toggle-button${isEditing ? " edit-toggle-button--active" : ""}`}
+                  type="button"
+                  onClick={onToggleEdit}
+                >
+                  {isEditing ? "Salva" : "Modifica"}
+                </button>
+              </div>
               <h1>{selectedWorkout.name || "Allenamento senza nome"}</h1>
               <p className="detail-meta">
                 Scheda: {activePlan.name || "Scheda senza nome"} · Oggi {todayLabel}
               </p>
-              <button className="inline-secondary-button" type="button" onClick={() => onStartEditingWorkout(selectedWorkout.id)}>
-                Rinomina allenamento
-              </button>
+              {isEditing && (
+                <button className="inline-secondary-button" type="button" onClick={() => onStartEditingWorkout(selectedWorkout.id)}>
+                  Rinomina allenamento
+                </button>
+              )}
             </>
           )}
         </header>
@@ -147,41 +165,66 @@ function WorkoutDetail({
               <p>Aggiungi il primo esercizio con il pulsante <strong>+ Aggiungi esercizio</strong> qui sotto.</p>
             </div>
           ) : (
-            <div className="exercise-list">
-              {selectedWorkoutExercises.map((exercise) => (
-                <ExerciseCard
-                  activeTimer={activeTimer}
-                  completedSets={activeSession?.completedSetsByExercise?.[exercise.id] ?? []}
-                  exercise={exercise}
-                  isSessionActive={isSessionActive}
-                  key={exercise.id}
-                  onDelete={onDeleteExercise}
-                  onPauseTimer={onPauseRestTimer}
-                  onResetTimer={onResetRestTimer}
-                  onResumeTimer={onResumeRestTimer}
-                  onStartTimer={(exerciseId, durationSeconds, exerciseName) =>
-                    onStartRestTimer(exerciseId, durationSeconds, exerciseName, selectedWorkout.name, selectedWorkout.id, activePlan.id)
-                  }
-                  onToggleSet={onToggleExerciseSet}
-                  onUpdate={onUpdateExercise}
-                />
-              ))}
-            </div>
+            <SortableList
+              className="exercise-list"
+              items={selectedWorkoutExercises}
+              getKey={(exercise) => exercise.id}
+              disabled={!isEditing}
+              onReorder={onReorderExercises}
+              renderItem={(exercise, dragHandleProps) => (
+                <>
+                  {isEditing && (
+                    <button
+                      className="drag-handle"
+                      type="button"
+                      aria-label="Trascina per riordinare"
+                      {...dragHandleProps}
+                    >
+                      ⠿ Trascina
+                    </button>
+                  )}
+                  <ExerciseCard
+                    activeTimer={activeTimer}
+                    completedSets={activeSession?.completedSetsByExercise?.[exercise.id] ?? []}
+                    exercise={exercise}
+                    isEditMode={isEditing}
+                    isSessionActive={isSessionActive}
+                    onCopy={onCopyExercise}
+                    onDelete={onDeleteExercise}
+                    onPauseTimer={onPauseRestTimer}
+                    onResetTimer={onResetRestTimer}
+                    onResumeTimer={onResumeRestTimer}
+                    onStartTimer={(exerciseId, durationSeconds, exerciseName) =>
+                      onStartRestTimer(exerciseId, durationSeconds, exerciseName, selectedWorkout.name, selectedWorkout.id, activePlan.id)
+                    }
+                    onToggleSet={onToggleExerciseSet}
+                    onUpdate={onUpdateExercise}
+                  />
+                </>
+              )}
+            />
           )}
 
-          {isExerciseFormOpen ? (
-            <ExerciseForm
-              draft={exerciseDraft}
-              error={exerciseError}
-              onCancel={onCancelExerciseForm}
-              onChange={onExerciseDraftChange}
-              onSubmit={onAddExercise}
-            />
-          ) : (
-            <button className="secondary-action" type="button" onClick={onShowExerciseForm}>
-              + Aggiungi esercizio
+          {copiedExercise && (
+            <button className="ghost-button paste-exercise-button" type="button" onClick={onPasteExercise}>
+              Incolla "{copiedExercise.name?.trim() || "esercizio"}"
             </button>
           )}
+
+          {(isEditing || selectedWorkoutExercises.length === 0) &&
+            (isExerciseFormOpen ? (
+              <ExerciseForm
+                draft={exerciseDraft}
+                error={exerciseError}
+                onCancel={onCancelExerciseForm}
+                onChange={onExerciseDraftChange}
+                onSubmit={onAddExercise}
+              />
+            ) : (
+              <button className="secondary-action" type="button" onClick={onShowExerciseForm}>
+                + Aggiungi esercizio
+              </button>
+            ))}
 
           {saveWarning && <p className="warning">{saveWarning}</p>}
         </section>

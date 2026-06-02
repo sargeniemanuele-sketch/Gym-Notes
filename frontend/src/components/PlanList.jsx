@@ -5,6 +5,7 @@ import PlanCard from "./PlanCard.jsx";
 function PlanList({
   auth,
   hasTimerBar,
+  isEditing,
   isNewPlanFormOpen,
   onCancelCreatePlan,
   onCreatePlan,
@@ -15,6 +16,7 @@ function PlanList({
   onOpenPlan,
   onPlanNameChange,
   onResetData,
+  onToggleEdit,
   planName,
   plans,
   saveWarning
@@ -23,7 +25,18 @@ function PlanList({
     <main className={`app-shell${hasTimerBar ? " app-shell--with-bar" : ""}`}>
       <section className="plans-panel" aria-labelledby="app-title">
         <header className="plans-header">
-          <p className="eyebrow">Le tue schede</p>
+          <div className="page-header-top">
+            <p className="eyebrow">Le tue schede</p>
+            {plans.length > 0 && (
+              <button
+                className={`edit-toggle-button${isEditing ? " edit-toggle-button--active" : ""}`}
+                type="button"
+                onClick={onToggleEdit}
+              >
+                {isEditing ? "Salva" : "Modifica"}
+              </button>
+            )}
+          </div>
           <div className="brand-title-row">
             <img className="brand-mark" src="/icons/icon-192.png" alt="" aria-hidden="true" />
             <h1 id="app-title">Gym Notes</h1>
@@ -56,6 +69,7 @@ function PlanList({
               {plans.map((plan) => (
                 <PlanCard
                   key={plan.id}
+                  isEditing={isEditing}
                   onDelete={onDeletePlan}
                   onDuplicate={onDuplicatePlan}
                   onOpen={onOpenPlan}
@@ -64,36 +78,37 @@ function PlanList({
               ))}
             </div>
 
-            {isNewPlanFormOpen ? (
-              <form className="form-stack plan-create-form" onSubmit={onCreatePlan}>
-                <label htmlFor="plan-name">Nome scheda</label>
-                <input
-                  id="plan-name"
-                  type="text"
-                  value={planName}
-                  onChange={(event) => onPlanNameChange(event.target.value)}
-                  placeholder="Es. Scheda massa"
-                  autoComplete="off"
-                />
-                <div className="form-actions">
-                  <button type="submit">Crea scheda</button>
-                  <button className="ghost-button" type="button" onClick={onCancelCreatePlan}>
-                    Annulla
-                  </button>
-                </div>
-              </form>
-            ) : (
-              <button className="secondary-action plan-new-button" type="button" onClick={onOpenNewPlanForm}>
-                + Nuova scheda
-              </button>
-            )}
+            {isEditing &&
+              (isNewPlanFormOpen ? (
+                <form className="form-stack plan-create-form" onSubmit={onCreatePlan}>
+                  <label htmlFor="plan-name">Nome scheda</label>
+                  <input
+                    id="plan-name"
+                    type="text"
+                    value={planName}
+                    onChange={(event) => onPlanNameChange(event.target.value)}
+                    placeholder="Es. Scheda massa"
+                    autoComplete="off"
+                  />
+                  <div className="form-actions">
+                    <button type="submit">Crea scheda</button>
+                    <button className="ghost-button" type="button" onClick={onCancelCreatePlan}>
+                      Chiudi
+                    </button>
+                  </div>
+                </form>
+              ) : (
+                <button className="secondary-action plan-new-button" type="button" onClick={onOpenNewPlanForm}>
+                  + Nuova scheda
+                </button>
+              ))}
           </>
         )}
 
         <AccountCard
           auth={auth}
           onLogout={onLogout}
-          onResetData={onResetData}
+          onResetData={isEditing ? onResetData : undefined}
           saveWarning={saveWarning}
         />
       </section>

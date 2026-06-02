@@ -42,6 +42,28 @@ const emptyExerciseDraft = {
   notes: ""
 };
 
+const EXERCISE_CLIPBOARD_KEY = "gym-notes-exercise-clipboard-v1";
+
+function loadCopiedExercise() {
+  try {
+    const raw = window.localStorage.getItem(EXERCISE_CLIPBOARD_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+function pickExerciseFields(exercise) {
+  return {
+    name: exercise.name ?? "",
+    sets: exercise.sets ?? "",
+    reps: exercise.reps ?? "",
+    weight: exercise.weight ?? "",
+    rest: exercise.rest ?? "",
+    notes: exercise.notes ?? ""
+  };
+}
+
 function App() {
   const [gymData, setGymData] = useState(null);
   const [isLoadingData, setIsLoadingData] = useState(false);
@@ -58,6 +80,10 @@ function App() {
   const [isExerciseFormOpen, setIsExerciseFormOpen] = useState(false);
   const [exerciseDraft, setExerciseDraft] = useState(emptyExerciseDraft);
   const [exerciseError, setExerciseError] = useState("");
+  const [copiedExercise, setCopiedExercise] = useState(() => loadCopiedExercise());
+  const [isEditingPlans, setIsEditingPlans] = useState(false);
+  const [isEditingWorkouts, setIsEditingWorkouts] = useState(false);
+  const [isEditingExercises, setIsEditingExercises] = useState(false);
   const [cloudSaveStatus, setCloudSaveStatus] = useState(CLOUD_SAVE_STATUS.IDLE);
   const [saveWarning, setSaveWarning] = useState("");
   const [pdfError, setPdfError] = useState("");
@@ -749,13 +775,9 @@ function App() {
     };
 
     persistNextData(nextData);
-    setIsPlanOpen(true);
-    setIsNewPlanFormOpen(false);
-    setSelectedWorkoutId(null);
-    setActiveTimer(null);
-    setIsRenamingPlan(false);
-    setPlanNameBeforeRename(null);
     setPlanName("");
+    setIsNewPlanFormOpen(true);
+    setIsEditingPlans(true);
   }
 
   function handleOpenPlan(planId) {
@@ -780,6 +802,9 @@ function App() {
     setExerciseDraft(emptyExerciseDraft);
     setExerciseError("");
     setPdfError("");
+    setIsEditingPlans(false);
+    setIsEditingWorkouts(false);
+    setIsEditingExercises(false);
   }
 
   async function handleDeletePlan(planId) {
@@ -915,6 +940,25 @@ function App() {
     setExerciseDraft(emptyExerciseDraft);
     setExerciseError("");
     setPdfError("");
+    setIsEditingPlans(false);
+    setIsEditingWorkouts(false);
+    setIsEditingExercises(false);
+  }
+
+  function handleOpenWorkout(workoutId) {
+    setSelectedWorkoutId(workoutId);
+    setIsEditingExercises(false);
+    setIsExerciseFormOpen(false);
+    setExerciseDraft(emptyExerciseDraft);
+    setExerciseError("");
+  }
+
+  function handleBackToPlanDetail() {
+    setSelectedWorkoutId(null);
+    setIsEditingExercises(false);
+    setIsExerciseFormOpen(false);
+    setExerciseDraft(emptyExerciseDraft);
+    setExerciseError("");
   }
 
   function handleCancelCreatePlan() {
@@ -952,7 +996,6 @@ function App() {
 
     persistNextActivePlan(nextPlan);
     setWorkoutName("");
-    setIsNewWorkoutFormOpen(false);
   }
 
   function handleCancelCreateWorkout() {
@@ -1303,13 +1346,130 @@ function App() {
     });
     setExerciseDraft(emptyExerciseDraft);
     setExerciseError("");
-    setIsExerciseFormOpen(false);
+  }
+
+  function handleCopyExercise(exerciseId) {
+    const exercise = selectedWorkout?.exercises.find((item) => item.id === exerciseId);
+
+    if (!exercise) {
+      return;
+    }
+
+    const snapshot = pickExerciseFields(exercise);
+    setCopiedExercise(snapshot);
+
+    try {
+      window.localStorage.setItem(EXERCISE_CLIPBOARD_KEY, JSON.stringify(snapshot));
+    } catch {
+      // Persisting the clipboard is best-effort; in-memory copy still works.
+    }
+
+    showSessionFeedback("Esercizio copiato ✓");
+  }
+
+  function handlePasteExercise() {
+    if (!copiedExercise || !activePlan || !selectedWorkout) {
+      return;
+    }
+
+    const now = new Date().toISOString();
+    const nextExercise = {
+      id: createId(),
+      name: copiedExercise.name,
+      sets: copiedExercise.sets,
+      reps: copiedExercise.reps,
+      weight: copiedExercise.weight,
+      rest: copiedExercise.rest,
+      notes: copiedExercise.notes,
+      createdAt: now,
+      updatedAt: now
+    };
+
+    const nextPlan = updateWorkoutInPlan(activePlan, selectedWorkout.id, (workout) => ({
+      ...workout,
+      updatedAt: now,
+      exercises: [...workout.exercises, nextExercise]
+    }));
+
+    persistNextActivePlan({
+      ...nextPlan,
+      updatedAt: now
+    });
+    showSessionFeedback("Esercizio incollato ✓");
   }
 
   function handleCancelExerciseForm() {
     setExerciseDraft(emptyExerciseDraft);
     setExerciseError("");
     setIsExerciseFormOpen(false);
+  }
+
+  function handleToggleEditPlans() {
+    if (isEditingPlans) {
+      setIsNewPlanFormOpen(false);
+      setPlanName("");
+    }
+    setIsEditingPlans(!isEditingPlans);
+  }
+
+  function handleToggleEditWorkouts() {
+    if (isEditingWorkouts) {
+      setIsNewWorkoutFormOpen(false);
+      setWorkoutName("");
+      setEditingWorkoutId(null);
+      setWorkoutNameBeforeRename(null);
+    }
+    setIsEditingWorkouts(!isEditingWorkouts);
+  }
+
+  function handleToggleEditExercises() {
+    if (isEditingExercises) {
+      setIsExerciseFormOpen(false);
+      setExerciseDraft(emptyExerciseDraft);
+      setExerciseError("");
+      if (editingWorkoutId === selectedWorkout?.id) {
+        handleCancelWorkoutRename();
+      }
+    }
+    setIsEditingExercises(!isEditingExercises);
+  }
+
+  function handleReorderExercises(fromIndex, toIndex) {
+    if (!activePlan || !selectedWorkout || fromIndex === toIndex) {
+      return;
+    }
+
+    const now = new Date().toISOString();
+    const nextPlan = updateWorkoutInPlan(activePlan, selectedWorkout.id, (workout) => {
+      const exercises = [...workout.exercises];
+      const [moved] = exercises.splice(fromIndex, 1);
+
+      if (!moved) {
+        return workout;
+      }
+
+      exercises.splice(toIndex, 0, moved);
+      return { ...workout, updatedAt: now, exercises };
+    });
+
+    persistNextActivePlan({ ...nextPlan, updatedAt: now });
+  }
+
+  function handleReorderWorkouts(fromIndex, toIndex) {
+    if (!activePlan || fromIndex === toIndex) {
+      return;
+    }
+
+    const workouts = [...activePlan.workouts];
+    const [moved] = workouts.splice(fromIndex, 1);
+
+    if (!moved) {
+      return;
+    }
+
+    const now = new Date().toISOString();
+    workouts.splice(toIndex, 0, moved);
+    persistNextActivePlan({ ...activePlan, workouts, updatedAt: now });
   }
 
   function handleUpdateExercise(exerciseId, field, value) {
@@ -1454,6 +1614,7 @@ function App() {
         <PlanList
           auth={auth}
           hasTimerBar={hasBar}
+          isEditing={isEditingPlans}
           isNewPlanFormOpen={isNewPlanFormOpen}
           onCancelCreatePlan={handleCancelCreatePlan}
           onCreatePlan={handleCreatePlan}
@@ -1464,6 +1625,7 @@ function App() {
           onOpenPlan={handleOpenPlan}
           onPlanNameChange={setPlanName}
           onResetData={handleResetData}
+          onToggleEdit={handleToggleEditPlans}
           planName={planName}
           plans={plans}
           saveWarning={saveWarning}
@@ -1481,18 +1643,24 @@ function App() {
           activeSession={activeSession}
           activeTimer={activeTimer}
           authToken={auth?.token}
+          copiedExercise={copiedExercise}
           editingWorkoutId={editingWorkoutId}
           exerciseDraft={exerciseDraft}
           exerciseError={exerciseError}
           hasTimerBar={hasBar}
+          isEditing={isEditingExercises}
           isExerciseFormOpen={isExerciseFormOpen}
           isPdfVisible={isPdfVisible}
           onAddExercise={handleAddExercise}
-          onBack={() => setSelectedWorkoutId(null)}
+          onBack={handleBackToPlanDetail}
           onCancelExerciseForm={handleCancelExerciseForm}
           onCancelSession={handleCancelSession}
           onCompleteSession={handleCompleteSession}
+          onCopyExercise={handleCopyExercise}
           onDeleteExercise={handleDeleteExercise}
+          onPasteExercise={handlePasteExercise}
+          onReorderExercises={handleReorderExercises}
+          onToggleEdit={handleToggleEditExercises}
           onExerciseDraftChange={handleExerciseDraftChange}
           onHidePdf={() => setIsPdfVisible(false)}
           onPauseRestTimer={handlePauseRestTimer}
@@ -1525,6 +1693,7 @@ function App() {
         activePlan={activePlan}
         editingWorkoutId={editingWorkoutId}
         hasTimerBar={hasBar}
+        isEditing={isEditingWorkouts}
         isNewWorkoutFormOpen={isNewWorkoutFormOpen}
         isRenamingPlan={isRenamingPlan}
         onBackToPlans={handleBackToPlans}
@@ -1536,12 +1705,14 @@ function App() {
         onFinishPlanRename={handleFinishPlanRename}
         onFinishWorkoutRename={handleFinishWorkoutRename}
         onOpenFilePicker={() => pdfInputRef.current?.click()}
-        onOpenWorkout={setSelectedWorkoutId}
+        onOpenWorkout={handleOpenWorkout}
         onPlanNameChange={handlePlanNameChange}
         onRemovePdf={handleRemovePdf}
+        onReorderWorkouts={handleReorderWorkouts}
         onStartPlanRename={handleStartPlanRename}
         onShowNewWorkoutForm={() => setIsNewWorkoutFormOpen(true)}
         onStartWorkoutRename={handleStartWorkoutRename}
+        onToggleEdit={handleToggleEditWorkouts}
         onCancelWorkoutRename={handleCancelWorkoutRename}
         onWorkoutNameChange={handleWorkoutNameChange}
         onWorkoutNameInputChange={setWorkoutName}

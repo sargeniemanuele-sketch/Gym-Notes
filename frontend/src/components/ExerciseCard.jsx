@@ -4,7 +4,7 @@ import { getNumericInputValue, normalizeNumericInputValue } from "../utils/numbe
 import { getRestDurationSeconds } from "../utils/timer.js";
 import RestTimer from "./RestTimer.jsx";
 
-function ExerciseCard({ activeTimer, completedSets = [], exercise, isSessionActive, onDelete, onPauseTimer, onResetTimer, onResumeTimer, onStartTimer, onToggleSet, onUpdate }) {
+function ExerciseCard({ activeTimer, completedSets = [], exercise, isEditMode = false, isSessionActive, onCopy, onDelete, onPauseTimer, onResetTimer, onResumeTimer, onStartTimer, onToggleSet, onUpdate }) {
   const [isEditing, setIsEditing] = useState(false);
   const exerciseName = exercise.name?.trim() || "Esercizio senza nome";
   const setsValue = exercise.sets?.trim();
@@ -40,9 +40,14 @@ function ExerciseCard({ activeTimer, completedSets = [], exercise, isSessionActi
             <h3>{exerciseName}</h3>
             <p className="exercise-performance">{performanceText}</p>
           </div>
-          <button className="compact-edit-button" type="button" onClick={() => setIsEditing(true)}>
-            Modifica
-          </button>
+          <div className="exercise-card-actions">
+            <button className="compact-edit-button" type="button" onClick={() => onCopy(exercise.id)}>
+              Copia
+            </button>
+            <button className="compact-edit-button" type="button" onClick={() => setIsEditing(true)}>
+              Modifica
+            </button>
+          </div>
         </header>
 
         <div className="exercise-read-grid">
@@ -199,9 +204,11 @@ function ExerciseCard({ activeTimer, completedSets = [], exercise, isSessionActi
         <button className="ghost-button" type="button" onClick={() => setIsEditing(false)}>
           Chiudi modifica
         </button>
-        <button className="danger-button" type="button" onClick={() => onDelete(exercise.id)}>
-          Elimina esercizio
-        </button>
+        {isEditMode && (
+          <button className="danger-button" type="button" onClick={() => onDelete(exercise.id)}>
+            Elimina esercizio
+          </button>
+        )}
       </div>
     </article>
   );

@@ -1,6 +1,6 @@
 import React from "react";
 
-function PdfHomeSection({ activePlan, onFileChange, onOpenFilePicker, onRemovePdf, pdfError, pdfInputRef }) {
+function PdfHomeSection({ activePlan, isEditing = false, onFileChange, onOpenFilePicker, onRemovePdf, pdfError, pdfInputRef }) {
   const hasPdf = !!activePlan.cloudPdf?.key;
   const pdfName = activePlan.cloudPdf?.name;
 
@@ -28,16 +28,18 @@ function PdfHomeSection({ activePlan, onFileChange, onOpenFilePicker, onRemovePd
           onChange={onFileChange}
         />
 
-        <div className="pdf-actions">
-          <button type="button" onClick={onOpenFilePicker}>
-            {hasPdf ? "Sostituisci" : "Carica PDF"}
-          </button>
-          {hasPdf && (
-            <button className="outline-danger-button pdf-danger-button" type="button" onClick={onRemovePdf}>
-              Rimuovi PDF dal cloud
+        {isEditing && (
+          <div className="pdf-actions">
+            <button type="button" onClick={onOpenFilePicker}>
+              {hasPdf ? "Sostituisci" : "Carica PDF"}
             </button>
-          )}
-        </div>
+            {hasPdf && (
+              <button className="outline-danger-button pdf-danger-button" type="button" onClick={onRemovePdf}>
+                Rimuovi PDF dal cloud
+              </button>
+            )}
+          </div>
+        )}
 
         {pdfError && <p className="field-error">{pdfError}</p>}
       </div>

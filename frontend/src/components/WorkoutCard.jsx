@@ -3,6 +3,7 @@ import { formatDate } from "../utils/formatters.js";
 
 function WorkoutCard({
   editingWorkoutId,
+  isEditing = false,
   onCancelRename,
   onDelete,
   onFinishRename,
@@ -61,9 +62,11 @@ function WorkoutCard({
             <button type="button" onClick={() => onOpen(workout.id)}>
               Apri
             </button>
-            <button className="ghost-button" type="button" onClick={handleStartEdit}>
-              Modifica
-            </button>
+            {isEditing && (
+              <button className="ghost-button" type="button" onClick={handleStartEdit}>
+                Modifica
+              </button>
+            )}
           </>
         )}
       </div>
