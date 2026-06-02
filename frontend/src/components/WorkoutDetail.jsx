@@ -23,6 +23,7 @@ function WorkoutDetail({
   onBack,
   onCancelExerciseForm,
   onCancelSession,
+  onClearCopiedExercise,
   onCompleteSession,
   onCopyExercise,
   onDeleteExercise,
@@ -206,9 +207,19 @@ function WorkoutDetail({
           )}
 
           {copiedExercise && (
-            <button className="ghost-button paste-exercise-button" type="button" onClick={onPasteExercise}>
-              Incolla "{copiedExercise.name?.trim() || "esercizio"}"
-            </button>
+            <div className="paste-bar">
+              <button className="paste-exercise-button" type="button" onClick={onPasteExercise}>
+                Incolla "{copiedExercise.name?.trim() || "esercizio"}"
+              </button>
+              <button
+                className="paste-clear-button"
+                type="button"
+                aria-label="Scarta esercizio copiato"
+                onClick={onClearCopiedExercise}
+              >
+                ×
+              </button>
+            </div>
           )}
 
           {(isEditing || selectedWorkoutExercises.length === 0) &&

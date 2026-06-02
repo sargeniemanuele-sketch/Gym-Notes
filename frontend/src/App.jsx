@@ -1367,6 +1367,16 @@ function App() {
     showSessionFeedback("Esercizio copiato ✓");
   }
 
+  function handleClearCopiedExercise() {
+    setCopiedExercise(null);
+
+    try {
+      window.localStorage.removeItem(EXERCISE_CLIPBOARD_KEY);
+    } catch {
+      // Best-effort cleanup of the persisted clipboard.
+    }
+  }
+
   function handlePasteExercise() {
     if (!copiedExercise || !activePlan || !selectedWorkout) {
       return;
@@ -1656,6 +1666,7 @@ function App() {
           onCancelExerciseForm={handleCancelExerciseForm}
           onCancelSession={handleCancelSession}
           onCompleteSession={handleCompleteSession}
+          onClearCopiedExercise={handleClearCopiedExercise}
           onCopyExercise={handleCopyExercise}
           onDeleteExercise={handleDeleteExercise}
           onPasteExercise={handlePasteExercise}
